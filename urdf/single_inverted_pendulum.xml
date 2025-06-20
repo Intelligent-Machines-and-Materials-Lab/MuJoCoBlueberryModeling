@@ -1,0 +1,12 @@
+<mujoco model="single_pendulum">
+  <compiler angle="radian"/>
+
+  <worldbody>
+    <geom size="0.025 0.025 0.025" type="box" rgba="0 0 1 1"/>
+    <body name="branch_link">
+      <inertial pos="0 0 0.395" mass="0.05052" diaginertia="0.01051 0.01051 9.338e-07"/>
+      <joint name="base_branch_joint" pos="0 0 0" axis="0 1 0"/>
+      <geom size="0.00608 0.395" pos="0 0 0.395" type="cylinder" rgba="0 1 0 1"/>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,0 +1,99 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="single_pendulum">
+
+	<link name="world"/>
+	<joint name="world_to_base"
+		   type="fixed">
+		<parent link="world" />
+		<child link="base_link" />
+		<origin xyz="0 0 0"
+				rpy="0 0 0" />
+		<axis xyz="0 0 0" />
+	</joint>
+	
+
+	<!-- - - - - - --> 
+	<!-- Base cube -->
+	<!-- - - - - - -->
+	
+	<link name="base_link">
+		<inertial>
+			<mass value="0" />
+			<inertia ixx="0.0" 
+					 ixy="0.0" 
+					 ixz="0.0" 
+					 iyy="0.0" 
+					 iyz="0.0" 
+					 izz="0.0" />
+		</inertial>
+		<visual>
+			<origin xyz="0 0 0" 
+					rpy="0 0 0" />
+			<geometry>
+				<box size=".05 .05 .05"/>
+			</geometry>
+			<material name="blue">
+				<color rgba="0 0 1 1" />
+			</material>
+		</visual>
+		<collision>
+			<origin xyz="0 0 0" 
+					rpy="0 0 0" />
+			<geometry>
+				<box size=".05 .05 .05" />
+			</geometry>
+		</collision>
+	</link>
+
+	<!-- - - - - - - -->
+	<!-- Revolute Joint -->
+	<!-- - - - - - - -->
+	
+	<joint name="base_branch_joint" 
+		   type="revolute">
+		<parent link="base_link" />
+		<child link="branch_link" />
+		<origin xyz="0 0 0"
+				rpy="0 0 0" />
+		<axis xyz="0 1 0" />
+		<limit effort="0" 
+			   velocity="0"/>
+		<dynamics damping="0" friction="0"/>
+	</joint>
+
+	<!-- - - - - - - -->
+	<!-- First actual branch -->
+	<!-- - - - - - - -->
+	
+	<link name="branch_link">
+		<inertial>
+			<mass value="0.05052" />
+			<inertia ixx="0.01051" 
+					 ixy="0.0" 
+					 ixz="0.0" 
+					 iyy="0.01051" 
+					 iyz="0.0" 
+					 izz="9.338e-07" />
+			<origin xyz="0 0 .395" />
+		</inertial>
+		<visual>
+			<origin xyz="0 0 .395" 
+					rpy="0 0 0" />
+			<geometry>
+				<cylinder length="0.79" 
+						  radius="0.00608" />
+			</geometry>
+			<material name="green">
+				<color rgba="0 1 0 1" />
+			</material>
+		</visual>
+		<collision>
+			<origin xyz="0 0 .395" 
+					rpy="0 0 0" />
+			<geometry>
+				<cylinder length="0.79" 
+						  radius="0.00608" />
+			</geometry>
+		</collision>
+	</link>
+</robot>
