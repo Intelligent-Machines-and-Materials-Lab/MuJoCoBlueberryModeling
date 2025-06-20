@@ -29,9 +29,11 @@ np.set_printoptions(precision=3, suppress=True, linewidth=100)
 from IPython.display import clear_output
 clear_output()
 
-from pyvirtualdisplay import Display 
-display = Display(visible = 0, size=(1400, 900))
-display.start()
+# from pyvirtualdisplay import Display 
+# display = Display(visible = 0, size=(1400, 900))
+# display.start()
+
+import mujoco.viewer
 
 xml = """
 <mujoco model="single_pendulum">
@@ -51,13 +53,11 @@ xml = """
 model = mujoco.MjModel.from_xml_string(xml)
 data = mujoco.MjData(model)
 
-mujoco.viewer.launch(model, data)
+# mujoco.viewer.launch(model, data)
 
-# ctx = mujoco.GLContext(1000, 1000)
-# ctx.make_current()
 
-# with mujoco.Renderer(model) as renderer:
-#   mujoco.mj_forward(model, data)
-#   renderer.update_scene(data)
+with mujoco.Renderer(model) as renderer:
+  mujoco.mj_forward(model, data)
+  renderer.update_scene(data)
 
-#   media.show_image(renderer.render())
+  media.show_image(renderer.render())
