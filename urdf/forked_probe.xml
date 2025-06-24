@@ -1,0 +1,16 @@
+<mujoco model="forked_probe">
+  <compiler angle="radian"/>
+
+  <worldbody>
+    <geom size="0.025 0.025 0.025" pos="-0.115 0 0" type="box" rgba="1 0 0 1"/>
+    <body name="probe_link" pos="-0.12 0 0">
+      <inertial pos="0.0801087 0 0" quat="0 0.707107 0 0.707107" mass="0.115" diaginertia="0.0230877 0.0230846 0.0230031"/>
+      <joint name="base_joint" pos="0 0 0" axis="1 0 0" type="slide"/>
+      <geom size="0.005 0.05" pos="0.05 0 0" quat="0.707107 0 0.707106 0" type="cylinder" rgba="1 0 0 1"/>
+      <geom size="0.01 0.01 0.01" pos="0.1 0 0" type="box" rgba="1 0 0 1"/>
+      <geom size="0.005 0.0175" pos="0.0975 0 0" quat="0.707107 0.707106 0 0" type="cylinder" rgba="1 0 0 1"/>
+      <geom size="0.005 0.025" pos="0.1225 0.0175 0" quat="0.704433 -0.0614407 0.704432 0.0614408" type="cylinder" rgba="1 0 0 1"/>
+      <geom size="0.005 0.025" pos="0.1225 -0.0175 0" quat="0.704433 0.0614407 0.704432 -0.0614408" type="cylinder" rgba="1 0 0 1"/>
+    </body>
+  </worldbody>
+</mujoco>
