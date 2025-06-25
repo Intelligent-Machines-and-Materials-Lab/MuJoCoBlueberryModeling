@@ -6,6 +6,10 @@
 
 ## Running Log
 
+6/24/25
+
+MuJoCo has a "position" actuator type that is kind of like a servo motor. My first plan is to run that on the probe and see if we can get it to push on the cane. 
+
 6/23/25
 
 Figured this is as good a place as any to make notes on my progress in MuJoCo for blueberry cane modeling. 
