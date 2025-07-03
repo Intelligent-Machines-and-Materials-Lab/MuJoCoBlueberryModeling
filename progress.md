@@ -6,6 +6,46 @@
 
 ## Running Log
 
+7/3/25
+
+My #1 suspect for the disparity between the napkin math and the force output is the contact forces/stabilization that MuJoCo has to do behind the scenes. I did mess with `solref` and `solimp`, but neither direction makes the forces any closer to the napkin math outputs. 
+
+So my next idea was to make it a closed loop system -- attach the probe to a wall, effectively, and make a hinge joint connecting the probe to the branch, and push on it. However, this introduces constraint stabilization instead, and if it's not perfectly lined up, introduces its own problems, like huge jumps in force/position at the beginning. I've bashed my head long enough against it in the current state to believe it's not going to work. Here's the next ideas I have: 
+
+- a closed kinematic loop with a joint at the wall, a slider, a joint at the connection, and another joint at the base (4 joints total)
+- swapping the velocity controller for a position controller so that it STOPS and we the forces can stabilize
+- switching to applying a force trajectory at a point instead of having a second body at all. That way we avoid any weird constraints or contacts or any of that. 
+
+7/2/25
+
+mujoco.mj_contactForce() reports the contact force in the "contact frame", which is a frame defined at the point of contact, not in the world frame. 
+
+When we do some quick napkin math:
+
+```
+napkin_math_force = (295*branch_max_disp)/PROBE_HEIGHT
+```
+
+and compare it to the actual force we're measuring at the contact point, we get (ignore the negative sign):
+
+```
+Final branch displacement: 0.019 rad
+Napkin math force: 7.553 N
+Final contact x force: -11.287 N
+```
+
+6/25/25
+
+Trying to figure out how to get the probe to follow a velocity of 1mm/s, because it really doesn't want to do that. See images/plots for different combinations of dt and kv I've attempted to get there (though I've gitignore'd them because it's clutter). It seems like there's a minimum dt to get the simulation to even register contact between the two objects. Then there's a minimum kv to get the probe to push hard enough on the branch to move it, but also a maximum, else it will just go too fast. So there's this little window where it will push consistently. The best I've found so far is around dt = .00001 and kv=34000. It doesn't follow exactly, but it at least pushes at a consistent pace. We can compare force values when the branch has been displaced by a certain amount, rather than at a specific time, if we need to. 
+
+![A plot of three increasing lines, representing the ideal movement of the probe, the actual movement of the probe, and the actual displacement of the branch.](images/joint_positions_kv34000_dt1e-05.png)
+
+It has a rather rough force plot as the branch and probe establish contact, but it smooths out over time to a very reasonable line. 
+
+![A force plot, with a strong oscillation at the beginning, but then a steadily increasing line afterwards](images/x_force_kv34000_dt1e-05.png)
+
+Upon going all the way to 45 seconds (which takes 14 minutes of real time to simulate), it only gets to 30mm. 
+
 6/24/25
 
 MuJoCo has a "position" actuator type that is kind of like a servo motor. My first plan is to run that on the probe and see if we can get it to push on the cane. 
