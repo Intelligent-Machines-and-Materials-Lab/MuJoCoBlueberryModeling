@@ -6,6 +6,20 @@
 
 ## Running Log
 
+7/7/25
+
+Spent the day trying different parameters for solimp and solref in an attempt to minimize the difference between the napkin math and the calculated contact force. Attempts are documented here: [Contact definition experiments](https://docs.google.com/spreadsheets/d/1iFUkzn5xVksr9jLl0r_p5st1Fuz1WwpFBKT4AZi-6Zg/edit?usp=sharing) 
+
+Since the branch is very thin, a very quick transition to stiffness was necessary with the solimp values, but a longer time constant could be used on the spring-damper system for the contact (first value of solref). The best values I achieved for the system, over the 45 second simulation, were a napkin math estimate of 12.9N and a measured simulation contact force of 13.55N. About half a newton of error is honestly better than I thought I was going to achieve with this. 
+
+I did find out that the branch was "phasing through" the crossbar in the earlier experiments, which is what was causing the REALLY drastic oscillations seen in the force plots -- the branch was getting stuck between the crossbar and the pushrod. The force plots are much smoother after taking out the "fork" of the forked probe. A thick "probe" geometry should be used if we ever add the forked geometry back in. 
+
+For posterity, the best values: 
+
+```
+solref="0.125 1" solimp=".95 1 0.0025"
+```
+
 7/3/25
 
 My #1 suspect for the disparity between the napkin math and the force output is the contact forces/stabilization that MuJoCo has to do behind the scenes. I did mess with `solref` and `solimp`, but neither direction makes the forces any closer to the napkin math outputs. 
