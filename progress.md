@@ -6,6 +6,20 @@
 
 ## Running Log
 
+7/8/25
+
+Implemented a position controlled actuator instead of a velocity controlled actuator. Had to tune a little feedforward + PID controller for it. 
+
+![A plot of three lines. One of them, a black dashed line, steps up one mm every second. An orange line, representing the probe position, closely follows with some overshoot. A blue line, representing the branch angle, follows with some offset.](images/stepPosController.png)
+
+With the contact parameters from the velocity controller, over 5 seconds the plot looked just fine. However, the branch "broke" through the probe at 38 seconds. I knocked the solref down to <0.1 1> and that allowed the system to make it through to 45 seconds: 
+
+![A plot of three lines. One of them, a black dashed line, steps up one mm every second. An orange line, representing the probe position, closely follows with some overshoot. A blue line, representing the branch angle, follows with some offset.](images/stepPosController45s.png)
+
+At the end of the 45 seconds, we expected a force of 18.09N and measured a force of 18.96N. The final probe position is 45mm, and is only off by 1nm, as opposed to the velocity controller, which had a final probe position of around 33mm after 45s. 
+
+However, this has a PID controller that I spent about an hour tuning. I don't think the velocity controller in MuJoCo has a PID loop on it, just a proportional controller, so it's possible we could put a PID loop on that to make it better. 
+
 7/7/25
 
 Spent the day trying different parameters for solimp and solref in an attempt to minimize the difference between the napkin math and the calculated contact force. Attempts are documented here: [Contact definition experiments](https://docs.google.com/spreadsheets/d/1iFUkzn5xVksr9jLl0r_p5st1Fuz1WwpFBKT4AZi-6Zg/edit?usp=sharing) 
