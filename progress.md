@@ -6,6 +6,37 @@
 
 ## Running Log
 
+7/17/25
+
+Assuming we're going to move forward with a **position-controlled probe**. 
+
+The next steps are going to be to implement a branch that has more than one joint. Just to brainstorm some next steps here:
+- implement a branch with 2 joints with 0 deg resting positions, make sure nothing breaks. 
+- implement a branch with 3 joints with 0 deg resting positions by making that generalizable to n joints. make sure nothing breaks. 
+- just to check, change n=4. make sure nothing breaks. 
+- make it so that the stiffness of different joints can be changed outside the xml scripts.
+- implement a branch with 3 joints where at least one joint is NOT 0 degrees. 
+- figure out how to initiate the probe so that '0' degrees is touching the branch. 
+
+7/16/25
+
+The force-only simulations seem to be underestimating the amount of force required to push the canes. However, the velocity simulation and the position simulation produce equally bad results. They predict about 12N of force required over the 0.045rad displacement, whereas it should be around 17.7N, which is about a 32% error. (Cindy was not at all surprised when I brought this up at the Ag meeting.)
+
+
+7/15/25
+
+Re-removed the probe from the simulation in single_inv_pend_extForce.ipynb. 
+
+Skimming the documentation, there is something called a force sensor: [sensor/force](https://mujoco.readthedocs.io/en/stable/XMLreference.html#sensor-force)
+
+7/10-7/14 
+
+Migraine problems :(
+
+7/9/25
+
+Took out the probe so the branch was directly being pushed on by a force, but then it crashed my computer and all my progress was lost -_-
+
 7/8/25
 
 Implemented a position controlled actuator instead of a velocity controlled actuator. Had to tune a little feedforward + PID controller for it. 
