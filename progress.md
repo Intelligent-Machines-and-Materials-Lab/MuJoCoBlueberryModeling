@@ -3,20 +3,50 @@
 | ----------- | ---- |
 | Everything you can put in an MJDF file | [XML Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#) |
 | Procedurally adding things to an MJDF file | [Tree MJDF Example](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=Y4rV2NDh92Ga) |
+| Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 
 ## Running Log
+
+Updated checklist items from 7/17, with some additions: 
+
+- [x] implement a branch with 2 joints with 0 deg resting positions that's generalizable to n joints. 
+- [] Why does the probe look so high?
+- [] Make each segment a slightly different color
+- [] fix the controller now that the inertia is correct
+- [] is the passive stiffness on that joint actually working???
+- [] why doesn't it accept cylinders??
+- [] Make sure the procedurally generated branch is actually generalizable to more segments. 
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] implement a branch with 3 joints where at least one joint is NOT 0 degrees. 
+- [] figure out how to initiate the probe so that '0' degrees is touching the branch. 
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+
+7/18/25
+
+Made a fair bit of progress in programmatically generating canes. The nominal end goal is to be able to set a cane length and number of segments, and for it to segment the branch equally into that many segments and generate the simulation. 
+
+Main takeaways: 
+- Joints must be between BODIES, not geometries. 
+- New bodies must be defined as children of an existing body, and are defined with respect to that parent body's frame:
+
+```
+child_body = parent_body.add_body(name=body_name, pos=[0,0,segment_length])
+```
+- The mass moment of inertia was wrong for the existing branch URDFs. They were calculated at the base of the rod, not at the center of mass of the rod, so they are at least 4x bigger than they should be. They are now being calculated by the geometry of the branch and the density of 0.55 g/cm3, so it'll change depending on the geometry and be automatically calculated. 
 
 7/17/25
 
 Assuming we're going to move forward with a **position-controlled probe**. 
 
 The next steps are going to be to implement a branch that has more than one joint. Just to brainstorm some next steps here:
-- implement a branch with 2 joints with 0 deg resting positions, make sure nothing breaks. 
-- implement a branch with 3 joints with 0 deg resting positions by making that generalizable to n joints. make sure nothing breaks. 
-- just to check, change n=4. make sure nothing breaks. 
-- make it so that the stiffness of different joints can be changed outside the xml scripts.
-- implement a branch with 3 joints where at least one joint is NOT 0 degrees. 
-- figure out how to initiate the probe so that '0' degrees is touching the branch. 
+- [] implement a branch with 2 joints with 0 deg resting positions that's generalizable to n joints. make sure nothing breaks. 
+- [] just to check, change n=3. make sure nothing breaks. 
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] implement a branch with 3 joints where at least one joint is NOT 0 degrees. 
+- [] figure out how to initiate the probe so that '0' degrees is touching the branch. 
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+
+Started on implementing the 2 joint branch. I wanted to do it in such a way that it was generalizable and procedurally generated, so I started the work today but didn't finish it. 
 
 7/16/25
 
