@@ -15,6 +15,10 @@ Let's sing 99 bottles of beer on the wall but replace it with "99 bugs in the co
 
 Problem #1: The procedurally-generated branch looked too long. As it turns out, it was too long; turns out the MJDF generator wants HALF-lengths, not full-lengths. This also solved the falling-over problem, as the branch geometry was connected in the wrong place and thus created weird behavior. 
 
+- [x] Make each segment a slightly different color
+
+Honestly, just makes it easier to keep track of when problems like the above happen. For the time being, I'm just using the example from the procedurally-generated tree to make different variations of brown. 
+
 
 
 
@@ -46,7 +50,7 @@ Updated checklist items from 7/17, with some additions:
 
 - [x] implement a branch with 2 joints with 0 deg resting positions that's generalizable to n joints. 
 - [x] Why does the probe look so high?
-- [] Make each segment a slightly different color
+- [x] Make each segment a slightly different color
 - [] fix the controller now that the inertia is correct
 - [x] is the passive stiffness on that joint actually working???
 - [] why doesn't it accept cylinders??
