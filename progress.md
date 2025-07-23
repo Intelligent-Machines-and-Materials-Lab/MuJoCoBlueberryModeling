@@ -6,6 +6,18 @@
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 
 ## Running Log
+7/23/25
+
+Let's sing 99 bottles of beer on the wall but replace it with "99 bugs in the code"... 
+
+- [x] Why does the probe look so high?
+- [x] is the passive stiffness on that joint actually working???
+
+Problem #1: The procedurally-generated branch looked too long. As it turns out, it was too long; turns out the MJDF generator wants HALF-lengths, not full-lengths. This also solved the falling-over problem, as the branch geometry was connected in the wrong place and thus created weird behavior. 
+
+
+
+
 7/22/25
 
 Submitted to upgrading Ubuntu to 22.04, and of course it broke all the rendering. Spent all day figuring out how to unbreak it. 
@@ -33,10 +45,10 @@ Out for migraine :(
 Updated checklist items from 7/17, with some additions: 
 
 - [x] implement a branch with 2 joints with 0 deg resting positions that's generalizable to n joints. 
-- [] Why does the probe look so high?
+- [x] Why does the probe look so high?
 - [] Make each segment a slightly different color
 - [] fix the controller now that the inertia is correct
-- [] is the passive stiffness on that joint actually working???
+- [x] is the passive stiffness on that joint actually working???
 - [] why doesn't it accept cylinders??
 - [] Make sure the procedurally generated branch is actually generalizable to more segments. 
 - [] make it so that the stiffness of different joints can be changed outside the xml scripts.
