@@ -6,6 +6,29 @@
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 
 ## Running Log
+7/22/25
+
+Submitted to upgrading Ubuntu to 22.04, and of course it broke all the rendering. Spent all day figuring out how to unbreak it. 
+
+Fixes:
+
+1. Launch Ubuntu with Xorg, not wayland. This is done from the Ubuntu log-in screen, from the little gears in the bottom-right corner. This can be checked with the command ```echo $XDG_SESSION_TYPE``` in terminal. It should print ```x11``` if setup properly. 
+2. Don't run the script in Anaconda. Make sure it's running in the system Python environment. I've set up ag-venv-py310 to be based on that environment, so it should be good from there. It also didn't like Python 3.9.7 for some reason, so I switched to 3.10.12 and that seems to be working better. Hence, the upgrade and switch from ag-venv. 
+3. Run MuJoCo with glfw rendering backend. All environment options (which are now in `single_inv_pend_positionControlled.ipynb`) are:
+
+```
+%env MUJOCO_GL=glfw
+%env PYOPENGL_PLATFORM=glx
+%env LIBGL_ALWAYS_SOFTWARE=0
+```
+
+4. `graphicstester.py` is a good script to run to check that all the graphics stuff is installed correctly without the MuJoCo wonkiness. Just run it in terminal; if it doesn't come up with any errors, then we're golden. To set environment variables in terminal, use ```export MUJOCO_GL=glfw``` and similar. 
+
+
+7/21/25
+
+Out for migraine :(
+
 
 Updated checklist items from 7/17, with some additions: 
 
