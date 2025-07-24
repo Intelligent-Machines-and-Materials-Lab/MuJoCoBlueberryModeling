@@ -6,6 +6,57 @@
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 
 ## Running Log
+
+7/28/25
+
+Held over checklist items with an addition:
+
+- [] why doesn't it accept cylinders??
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] double check that the controller works: (1) all the way to 45s (2) for up to 10 segment branches
+- [] implement a branch where at least one joint is NOT 0 degrees. 
+- [] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
+- [] make 3-dof rotational joints possible
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+- [] take an arbitrary bezier curve and make it into a series of links
+
+
+
+
+7/25/25
+
+Out for travel
+
+7/24/25
+
+- [x] fix the controller now that the inertia is correct
+
+Finished up re-tuning the controller. 
+
+![A step plot over 5 seconds, with a blue line following it representing the probe movement. 4 lines representing the 4 joints on the branch follow the general shape near the bottom.](images/pidcontrollerwithfixedinertia5s.png)
+
+The feed-forward controller now takes the "equivalent" stiffness of the joints (assuming all the stiffnesses are the same for now) and multiplies it by the distance the probe has gone. I.e. `F_ff = k_eq * x_probe`. Since the angles are very small, we're making the assumption `sin(x) = x`. I tried to use the Ziegler-Nichols method to tune the PID controller, but it went more like: 
+
+1. Knock up Kp until it was critical 
+2. reduce it by 2/3 or so
+3. Knock up Kd until the behavior was reasonable 
+4. Knock up Ki until the steady state error was gone
+5. Do some balancing until there wasn't any overshoot 
+
+The controller might have to be modified for different branches and different equivalent stiffnesses, we'll have to see. 
+
+On the bright side... 
+
+- [x] Make sure the procedurally generated branch is actually generalizable to more segments. 
+
+That work last week did pay off a little; we can now split the branch into however many equal segments as we want. Yay! And we could modify it to do other things algorithmically instead of by some standard now, which is a good step. 
+
+I also spent a bit of time making the renderer a little nicer looking, and to make it more obvious how many joints are in the model. Behold:
+
+![A 4-jointed branch, now with a gray background, with black spheres denoting joints.](images\nicerbranchrender.png)
+
+I think it makes it a little clearer what's happening in the simulation, which might help avoid problems like below where joints were attached in improper places and segments were too long. It seemed kind of silly to spend time on this, but I think it'll prevent other problems from taking so long to debug in the future. 
+
 7/23/25
 
 Let's sing 99 bottles of beer on the wall but replace it with "99 bugs in the code"... 
@@ -19,7 +70,7 @@ Problem #1: The procedurally-generated branch looked too long. As it turns out, 
 
 Honestly, just makes it easier to keep track of when problems like the above happen. For the time being, I'm just using the example from the procedurally-generated tree to make different variations of brown. 
 
-
+Started re-tuning the controller but didn't quite finish. 
 
 
 7/22/25
@@ -51,10 +102,10 @@ Updated checklist items from 7/17, with some additions:
 - [x] implement a branch with 2 joints with 0 deg resting positions that's generalizable to n joints. 
 - [x] Why does the probe look so high?
 - [x] Make each segment a slightly different color
-- [] fix the controller now that the inertia is correct
+- [x] fix the controller now that the inertia is correct
 - [x] is the passive stiffness on that joint actually working???
 - [] why doesn't it accept cylinders??
-- [] Make sure the procedurally generated branch is actually generalizable to more segments. 
+- [x] Make sure the procedurally generated branch is actually generalizable to more segments. 
 - [] make it so that the stiffness of different joints can be changed outside the xml scripts.
 - [] implement a branch with 3 joints where at least one joint is NOT 0 degrees. 
 - [] figure out how to initiate the probe so that '0' degrees is touching the branch. 
