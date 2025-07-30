@@ -7,20 +7,56 @@
 
 ## Running Log
 
+7/29/25
+
+- [x] implement a branch where at least one joint is NOT 0 degrees. 
+
+There is now a method of CaneEditor called `offset_joint` that takes the joint index and offset amount as inputs and makes the spring reference point that much different. Another method, `get_zero_springref_state`, gets the 'data' to be the position for the starting position for all the offsets in the model. Though we should maybe change that to just getting the vector for qpos, that might be more elegant. What would be even MORE elegant is using the "keyframes" function, but I can't figure out how to programmatically add a keyframe after the xml is built (and Copilot gave me several bad answers before admitting it doesn't exist). 
+
+Here's a branch with two programmatically added offsets: 
+
+![A 4-segment inverted pendulum. Two of the segments are not at the 0 position.](images/BendyBranch.png)
+
+I think the next step is to add a setup step where the probe goes at a constant velocity until contact is initiated. Then the nicer controller should kick in and all that jazz. But it doesn't make sense to run at 10kHz while there's no contact. 
+
+
 7/28/25
 
-Held over checklist items with an addition:
+- [x] double check that the controller works for up to 10 segment branches
 
+As written, the controller does generalize to 10 segments by just tossing in NUM_SEGMENTS = 10. I love the very rare occasion when something just works the first time. 
+
+- [x] double check that the controller works all the way to 45s 
+
+My luck did not hold. 4 segments at k=295 each had a "breakthrough" at t=30s. I don't have a plot because the kernel died after making the video. 
+
+Giving the probe all the same contact parameters as the branch did get rid of the breakthrough problem, but also crashed the kernel after 45 seconds. (This might just be a "too much data" problem -- added a task for that on the list.) It also drastically change the nature of the contact forces between the two bodies to make it less stable, which I don't think I like very much. 
+
+This takes FOREVER because getting the simulation to 45 seconds takes 15 minutes to run. I ran one with some "in-between" values for the probe:
+
+```solref="0.06" solimp="0.925 .975 0.002 1 0.5" friction="0.5 0.0025 0"```
+
+This got all the way out to 37s or so but then stopped because it hit the actuator limit of 10N -_- However, the actuator values looked smooth, and it didn't break through up to that point. 
+
+Ran it again with a higher actuator limit and it does make it out to 45 seconds just fine. Yay!
+
+- [x] take less data during simulations so that the kernel doesn't crash when trying to plot 45 second simulations
+
+There's now a parameter called `datacap_rate` that determines the frequency in Hz at which the simulation captures data for plotting. It also helps the simulation move just a tad faster as well. More importantly, the kernel doesn't crash as often when plotting the immense amount of data. 
+
+
+*Held over checklist items for this week:*
+
+- [x] take less data during simulations so that the kernel doesn't crash when trying to plot 45 second simulations
 - [] why doesn't it accept cylinders??
 - [] make it so that the stiffness of different joints can be changed outside the xml scripts.
-- [] double check that the controller works: (1) all the way to 45s (2) for up to 10 segment branches
-- [] implement a branch where at least one joint is NOT 0 degrees. 
+- [x] double check that the controller works all the way to 45s 
+- [x] double check that the controller works for up to 10 segment branches
+- [x] implement a branch where at least one joint is NOT 0 degrees. 
 - [] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
 - [] make 3-dof rotational joints possible
 - [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
 - [] take an arbitrary bezier curve and make it into a series of links
-
-
 
 
 7/25/25
