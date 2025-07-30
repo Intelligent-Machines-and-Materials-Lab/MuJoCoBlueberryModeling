@@ -9,7 +9,15 @@
 
 7/29/25
 
+- [x] implement a branch where at least one joint is NOT 0 degrees. 
 
+There is now a method of CaneEditor called `offset_joint` that takes the joint index and offset amount as inputs and makes the spring reference point that much different. Another method, `get_zero_springref_state`, gets the 'data' to be the position for the starting position for all the offsets in the model. Though we should maybe change that to just getting the vector for qpos, that might be more elegant. What would be even MORE elegant is using the "keyframes" function, but I can't figure out how to programmatically add a keyframe after the xml is built (and Copilot gave me several bad answers before admitting it doesn't exist). 
+
+Here's a branch with two programmatically added offsets: 
+
+![A 4-segment inverted pendulum. Two of the segments are not at the 0 position.](images/BendyBranch.png)
+
+I think the next step is to add a setup step where the probe goes at a constant velocity until contact is initiated. Then the nicer controller should kick in and all that jazz. But it doesn't make sense to run at 10kHz while there's no contact. 
 
 
 7/28/25
@@ -44,7 +52,7 @@ There's now a parameter called `datacap_rate` that determines the frequency in H
 - [] make it so that the stiffness of different joints can be changed outside the xml scripts.
 - [x] double check that the controller works all the way to 45s 
 - [x] double check that the controller works for up to 10 segment branches
-- [] implement a branch where at least one joint is NOT 0 degrees. 
+- [x] implement a branch where at least one joint is NOT 0 degrees. 
 - [] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
 - [] make 3-dof rotational joints possible
 - [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
