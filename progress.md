@@ -6,12 +6,35 @@
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 
 ## Running Log
+7/31/25
+
+- [x] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
+
+This is pretty much implemented now. Things that were changed: 
+- made a `frames_preprocess` for the first simulation and `frames_stepping` for the second simulation, and then concatenated them together to make the visualization. 
+- the timestep for the first sim is .0001 so that it can run much faster, since it doesn't need to deal with contact forces. 
+- the PID controller was changed so that the feedforward controller during contact is calculated based on the offset of the probe from the contact point, not from the "zero" position. 
+- the PID controller of the velocity controller on the first simulation is just pure PID, no feedforward. (What would even go there anyway?)
+- For the first second of the second simulation, the desired position is set to just the initial position of the probe, to allow it time to settle. 
+
+
+7/30/25
+
+- [] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
+
+Made a new branch in case I absolutely mess everything up to work on a preprocessing step for this. 
+
+Started by making a different simulation block that uses a velocity controller that runs until contact. Right now it's completely separate from the stepping simulation. It saves the state at the end, which we can use to seed the starting position of the stepping simulation. 
+
+If I just run both one after the other, it doesn't render correctly. I have to fix how `frames` are written/saved, but that's a tomorrow problem. 
+
 
 7/29/25
 
 - [x] implement a branch where at least one joint is NOT 0 degrees. 
 
 There is now a method of CaneEditor called `offset_joint` that takes the joint index and offset amount as inputs and makes the spring reference point that much different. Another method, `get_zero_springref_state`, gets the 'data' to be the position for the starting position for all the offsets in the model. Though we should maybe change that to just getting the vector for qpos, that might be more elegant. What would be even MORE elegant is using the "keyframes" function, but I can't figure out how to programmatically add a keyframe after the xml is built (and Copilot gave me several bad answers before admitting it doesn't exist). 
+(7/30 - it now just returns a qpos vector instead.)
 
 Here's a branch with two programmatically added offsets: 
 
