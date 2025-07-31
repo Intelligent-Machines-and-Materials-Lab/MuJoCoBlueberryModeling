@@ -7,6 +7,7 @@
 
   <visual>
     <headlight diffuse=".9 .9 .9" specular=".75 .75 .75"/>
+    <!-- <headlight pos="1.23 -.034 0.68" diffuse=".9 .9 .9" specular=".75 .75 .75"/> -->
     <global orthographic="false" fovy="45" elevation="-15" />
     <!-- <map fogstart="2" fogend="8" />
     <rgba fog="1 1 1 1"/> -->
@@ -26,10 +27,11 @@
   </asset>
 
   <worldbody>
-    <!-- <camera name="free_cam" pos="-.034 -1.406 1.568" quat="0.92388 0 0.38268 0"/>  -->
+    <camera name="x_cam" pos="1.23 -.034 0.68" xyaxes="0 1 0 -.25 0 1"/>
     <!-- <geom name="floor" size="0.5 0.5 0.01" type="plane" rgba="0 0.6 0.09 1"/> -->
     <geom name="floor" size="0.25 0.25 0.01" type="plane" material="groundplane"/>
-    <light pos="0 -.5 3" diffuse=".6 .6 .6" specular=".6 .6 .6" castshadow="false" />
+    <!-- <light pos="0 -1 2" diffuse=".9 .9 .9" specular=".6 .6 .6" castshadow="false" /> -->
+    <light pos="1 0 2" diffuse=".9 .9 .9" specular=".6 .6 .6" castshadow="false" dir="-1 0 -2"/>
     <!-- <light pos="0 -2 0.5" mode="targetbody" target="probe_link" diffuse=".6 .6 .6" specular="0 0 0" castshadow="false"/> -->
 
     <!-- probe -->
