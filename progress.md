@@ -6,6 +6,26 @@
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 
 ## Running Log
+
+8/4/25
+
+- [x] figure out where to place the probe to be in line with the branch at the initial position 
+
+With a little bit of trig, I used a "site" to figure out the xy position of the probe, given a starting bending angle of each of the joints. The method is ```redefine probe```. We could *probably* get rid of the pre-process if we wanted to, and do it all algorithmically based on this and the radius of the branch. 
+
+![A four-segment inverted pendulum, with the joints all at different angles. A green probe is near the top segment.](images/offsetprobe.png)
+
+To do next: make sure this still works in simulation. 
+
+8/1/25
+
+- [] make 3-dof rotational joints possible
+
+This actually needs further breakdown:
+
+- [] break the plotting into joints that are in line and out of line with the probe motion 
+- [] figure out where to place the probe to be in line with the branch at the initial position
+
 7/31/25
 
 - [x] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
@@ -16,6 +36,14 @@ This is pretty much implemented now. Things that were changed:
 - the PID controller was changed so that the feedforward controller during contact is calculated based on the offset of the probe from the contact point, not from the "zero" position. 
 - the PID controller of the velocity controller on the first simulation is just pure PID, no feedforward. (What would even go there anyway?)
 - For the first second of the second simulation, the desired position is set to just the initial position of the probe, to allow it time to settle. 
+
+- [] make 3-dof rotational joints possible
+
+Made a new branch. 
+
+Okay, maybe this is a misnomer. It doesn't actually have to... twist about the z axis. 
+
+As a first pass, I just added a coincident joint in the x axis at the same point as the joint on the y axis for every branch. I added a camera that looks at the system from the other direction, so that we can tell what's going on in this dimension, too. 
 
 
 7/30/25
@@ -76,7 +104,7 @@ There's now a parameter called `datacap_rate` that determines the frequency in H
 - [x] double check that the controller works all the way to 45s 
 - [x] double check that the controller works for up to 10 segment branches
 - [x] implement a branch where at least one joint is NOT 0 degrees. 
-- [] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
+- [x] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
 - [] make 3-dof rotational joints possible
 - [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
 - [] take an arbitrary bezier curve and make it into a series of links
