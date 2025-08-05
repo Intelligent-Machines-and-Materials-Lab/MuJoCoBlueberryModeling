@@ -15,11 +15,18 @@ With a little bit of trig, I used a "site" to figure out the xy position of the 
 
 ![A four-segment inverted pendulum, with the joints all at different angles. A green probe is near the top segment.](images/offsetprobe.png)
 
-To do next: make sure this still works in simulation. 
+To dos for this week: 
+
+- [] break the plotting into joints that are in line and out of line with the probe motion 
+- [] verify the probe position still works with the simulation part of the code
+- [] why doesn't it accept cylinders??
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+- [] take an arbitrary bezier curve and make it into a series of links
 
 8/1/25
 
-- [] make 3-dof rotational joints possible
+- [x] make 3-dof rotational joints possible
 
 This actually needs further breakdown:
 
