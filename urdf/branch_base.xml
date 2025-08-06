@@ -35,10 +35,10 @@
     <!-- <light pos="0 -2 0.5" mode="targetbody" target="probe_link" diffuse=".6 .6 .6" specular="0 0 0" castshadow="false"/> -->
 
     <!-- probe -->
-    <body name="probe_link" pos="-0.107 0 .75">
+    <body name="probe_link" pos="-0.10 0 .75">
       <inertial pos="0.0801087 0 0" quat="0 0.707107 0 0.707107" mass="0.115" diaginertia="0.0230877 0.0230846 0.0230031"/>
       <joint name="probe_joint" pos="0 0 0" axis="1 0 0" type="slide" range="0 0.045"/>
-      <geom size="0.005 0.075" pos="0.025 0 0" quat="0.707107 0 0.707106 0" type="cylinder" rgba="0 1 0 1" solref="0.06" solimp="0.925 .975 0.002 1 0.5" friction="0.5 0.0025 0"/> 
+      <geom size="0.005 0.05" pos="0 0 0" quat="0.707107 0 0.707106 0" type="capsule" rgba="0 1 0 1" solref="0.06" solimp="0.925 .975 0.002 1 0.5" friction="0.5 0.0025 0"/> 
       <!-- friction="0 0 0" solref="0.1 1" solimp="0.95 1 0.0025 1 0.5"/> -->
     </body>
 

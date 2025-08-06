@@ -7,6 +7,30 @@
 
 ## Running Log
 
+8/6/25:
+
+- [x] verify the probe position still works with the simulation part of the code
+
+Something weird was happening with the initial position of the probe in the simulation. Looked into that a little more. Took out a positional offset in ```branch_base.xml``` for the geometry to make the offset math a little simpler. Ultimately, we should be able to position the probe to be in contact with the branch at the beginning of the simulation using JUST MATH. I also rounded off the probe geometry using ```capsule``` instead of ```cylinder```, so it contacts closer to the centerline of the probe instead of the bottom edge. 
+
+The math for the probe offset should be ```probe_length + probe_radius + branch_radius = 0.061```. Nominally the probe geometry should never change, so I set it to be ```0.055 + branch_radius```. 
+
+Adding to the to-do list:
+
+- [] modify the controller to be more robust (it's currently not great for these 3D canes)
+- [] add error for edge cases of probe height (too high specifically)
+- [] figure out what that error is regarding the rotation matrix
+- [] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
+
+8/5/25: 
+
+Just very distracted today...
+
+- [x] break the plotting into joints that are in line and out of line with the probe motion 
+
+Just plotting the y-axis joints, because those are the ones that should be changing the most. Continued working on probe placement. 
+
+
 8/4/25
 
 - [x] figure out where to place the probe to be in line with the branch at the initial position 
@@ -15,10 +39,10 @@ With a little bit of trig, I used a "site" to figure out the xy position of the 
 
 ![A four-segment inverted pendulum, with the joints all at different angles. A green probe is near the top segment.](images/offsetprobe.png)
 
-To dos for this week: 
+Other things to do this week: 
 
-- [] break the plotting into joints that are in line and out of line with the probe motion 
-- [] verify the probe position still works with the simulation part of the code
+- [x] break the plotting into joints that are in line and out of line with the probe motion 
+- [x] verify the probe position still works with the simulation part of the code
 - [] why doesn't it accept cylinders??
 - [] make it so that the stiffness of different joints can be changed outside the xml scripts.
 - [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
