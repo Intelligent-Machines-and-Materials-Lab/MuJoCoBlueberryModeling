@@ -1,3 +1,7 @@
+## What are these notes?
+
+These are Hannah's running notes about what's going on in development. It's not really meant to be public, but it was the easiest way to keep track of what needed to be worked on and what was still in progress on a day to day basis. If you've made it here by accident, enjoy Hannah's ramblings on how this got developed. Don't expect anything useful about how to use the code on this page. 
+
 ## Helpful Links
 | Description | Link |
 | ----------- | ---- |
@@ -13,6 +17,41 @@
 
 Simple check for too tall overall (longer than total length of branch) or exceeds length of segment.
 
+- [] figure out what that error is regarding the rotation matrix
+
+... Now that I'm trying to fix it, I can't replicate the error -_-
+
+- [x] why doesn't it accept cylinders??
+
+The documentation said a cylinder could be defined by 2 values, radius and half-length. But apparently when defining it programatically, it wants 3 values anyway; the last one can just be 0. Personally I think the 0 should go in the middle, so that the last value is consistently the half-length regardless of the geometry, but that's just me. 
+
+However, we run into a problem: If the branches are cylinders, then the probe can easily "slip off" the side. So, we can add a crossbar to the probe. But then we add back in the problem where the branch "breaks through" the collision object of the crossbar, and starts colliding with the long bar of the probe instead. Colliding with the middle of the bar instead of the end of a bar just makes for different dynamics... Because we're going to run into different problems with different branches, I think it might actually be better to leave the branch as a box for now and just deal with the inertia being slightly off (maybe by making it slightly skinnier) rather than deal with the wonky collisions. At least in the one example I had up while I was changing them, box branches + capsule probe had no break-throughs and no slipping of the probe, whereas a box probe and cylinder branches slipped at 17s and a crossguard probe broke through at 40s. 
+
+So I'm going to leave it as is for now. If we want to switch it back, the steps are:
+- switch ```type=mujoco.mjtGeom.mjGEOM_BOX, size=[radius, radius, segment_length/2]``` to ```type=mujoco.mjtGeom.mjGEOM_CYLINDER, size=[radius, segment_length/2, 0]``` when adding branches. In ```CaneEditor.redefine_probe```, ```contact_branch_length = geoms[0].size[2]``` needs to be switched to ```size[1]```. And then go into ```branch_base.xml```, add back in the crossbar geometry, and change it back to a box. 
+
+- [x] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
+
+Added a few more methods to CaneEditor to set branch angles based on the joint name and not by the joint index. The methods now available are:
+
+```offset_joint_by_name(self, joint_name, angle)``` Takes the exact joint name, i.e. "branch_joint_x0", and the angle. 
+
+```offset_joint_by_dir_and_number(self, joint_dir, joint_number, angle)``` is a little less verbose, taking 'x' and '0' instead and concatenating them together. After making it, I'm not actually sure how helpful it's going to be, except for when I forget what the branch joints are actually called. 
+
+```offset_all_joints_in_direction(self,  direction, angles)``` takes a direction "x" and a list of angles and offsets all of them together. The length of `angles` has to be the same as the number of segments in the tree. 
+
+```randomize_joint_angles(self)``` does what it sounds like. Right now it's a normal distribution about 0 radians with a standard deviation of 0.2 radians. It randomizes both the x and y joints. 
+
+To consolidate some of the remaining to-dos:
+
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] modify the controller to be more robust (it's currently not great for these 3D canes) (or just wait until we have something more concrete, because it seems like this changes every time we make a change to the model)
+- [] figure out what that error is regarding the rotation matrix
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+- [] take an arbitrary bezier curve and make it into a series of links
+
+
+
 8/6/25:
 
 - [x] verify the probe position still works with the simulation part of the code
@@ -21,12 +60,16 @@ Something weird was happening with the initial position of the probe in the simu
 
 The math for the probe offset should be ```probe_length + probe_radius + branch_radius = 0.061```. Nominally the probe geometry should never change, so I set it to be ```0.055 + branch_radius```. 
 
+Since changed that to ```0.056 + branch_radius```, since I don't want it to start in contact, and it seemed to be starting in contact beforehand. 
+
+It also seems like we can delete the pre-process step entirely with this method. (Cries in wasted time.)
+
 Adding to the to-do list:
 
 - [] modify the controller to be more robust (it's currently not great for these 3D canes) (or just wait until we have something more concrete, because it seems like this changes every time we make a change to the model)
-- [] add error for edge cases of probe height (too high specifically)
+- [x] add error for edge cases of probe height (too high specifically)
 - [] figure out what that error is regarding the rotation matrix
-- [] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
+- [x] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
 
 8/5/25: 
 
@@ -49,7 +92,7 @@ Other things to do this week:
 
 - [x] break the plotting into joints that are in line and out of line with the probe motion 
 - [x] verify the probe position still works with the simulation part of the code
-- [] why doesn't it accept cylinders??
+- [x] why doesn't it accept cylinders??
 - [] make it so that the stiffness of different joints can be changed outside the xml scripts.
 - [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
 - [] take an arbitrary bezier curve and make it into a series of links
@@ -60,8 +103,8 @@ Other things to do this week:
 
 This actually needs further breakdown:
 
-- [] break the plotting into joints that are in line and out of line with the probe motion 
-- [] figure out where to place the probe to be in line with the branch at the initial position
+- [x] break the plotting into joints that are in line and out of line with the probe motion 
+- [x] figure out where to place the probe to be in line with the branch at the initial position
 
 7/31/25
 
