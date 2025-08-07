@@ -7,6 +7,12 @@
 
 ## Running Log
 
+8/7/25:
+
+- [x] add error for edge cases of probe height (too high specifically)
+
+Simple check for too tall overall (longer than total length of branch) or exceeds length of segment.
+
 8/6/25:
 
 - [x] verify the probe position still works with the simulation part of the code
@@ -17,7 +23,7 @@ The math for the probe offset should be ```probe_length + probe_radius + branch_
 
 Adding to the to-do list:
 
-- [] modify the controller to be more robust (it's currently not great for these 3D canes)
+- [] modify the controller to be more robust (it's currently not great for these 3D canes) (or just wait until we have something more concrete, because it seems like this changes every time we make a change to the model)
 - [] add error for edge cases of probe height (too high specifically)
 - [] figure out what that error is regarding the rotation matrix
 - [] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
