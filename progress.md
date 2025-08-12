@@ -8,8 +8,27 @@ These are Hannah's running notes about what's going on in development. It's not 
 | Everything you can put in an MJDF file | [XML Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#) |
 | Procedurally adding things to an MJDF file | [Tree MJDF Example](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=Y4rV2NDh92Ga) |
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
+| Resource on B-spline knots | [Drexel Slides](https://www.cs.drexel.edu/~deb39/Classes/CS430/Lectures/L-09_BSplines_NURBS.pdf) |
 
 ## Running Log
+
+8/12/25:
+
+- [x] a metric for comparing the discretizations against each other for how well they describe the curve
+
+Turns out I was not having that much trouble with math, I was just not plotting things on an equal-axis graph, which was leading me to believe I was having trouble with math. Oops. But that package was very useful. The current iteration of ```bspline.ipynb``` takes a series of segments (as a series of coordinates in space) and a b-spline curve, takes 20 evenly spaced points along the curve, calculates the minimum distance to any segment, and uses that as the "error" to create a MSE. All that's for is to have some metric to compare different segment patterns against each other on how well they fit the curve. 
+
+8/11/25:
+
+- [] take an arbitrary b-spline curve and make it into a series of links
+
+Got a note from Cindy that she's actually planning to export B-splines instead of Bezier curves, so switching to look at those instead. Read up a little on B-splines. 
+
+Alright, this also needs to be broken down into a few steps. There are a number of different ways that we can go about this. A few things we'll need first though:
+- [x] a way to plot a potential discretization of a b-spline curve
+- [] a metric for comparing the discretizations against each other for how well they describe the curve
+
+Like an absolute loser I'm having trouble with the math for getting the shortest distance from the curve to the line. The current direction I'm heading in is having a set of points on the curve and getting their minimum distance to the line segments (maybe via projection?). There's maybe a helpful scikit tool: https://scikit-spatial.readthedocs.io/en/stable/api_reference/Line/methods/skspatial.objects.Line.project_point.html
 
 8/7/25:
 
