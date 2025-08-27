@@ -12,6 +12,21 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+8/26/25:
+
+Oops, it's been a while since I recorded anything. (Also I took about a week off in the interim there.) Have been working on importing Cindy's B-splines and also matching them up with the actual canes. 
+
+Right now I have a jupyter notebook that imports one of the canes as both a json file and an obj file and plots them together:
+
+![A b-spline denoted with pink points, overlaid on a blue spline. The blue spline is the reconstructed spline from the json file; the pink points are the imported OBJ vertices. Six control points are shown in orange.](images/bsplineimportplot.png)
+
+To do:
+
+- [] fully automate that process (automatically generate the knot vector and plot between which numbers)
+- [] "zero" the spline so it starts somewhere closer to (0, 0, 0) in space
+- [] Do we start with the first and last points in the spline as the initial points for the segmentation?
+
+
 8/12/25:
 
 - [x] a metric for comparing the discretizations against each other for how well they describe the curve
