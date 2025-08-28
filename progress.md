@@ -12,6 +12,22 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+8/27/25:
+
+
+- [x] fully automate that process (automatically generate the knot vector and plot between which numbers)
+
+Used ```bisect.bisect_right()``` and ```np.insert()``` to automate inserting the new joints into the segment chain. 
+
+- [x] Do we start with the first and last points in the spline as the initial points for the segmentation?
+
+Must have been tired when I wrote this one, the answer is clearly yes.
+
+Right now the process runs this segmentation until the RMSE is 0.2 (which is 2mm) and then stops (which is what Joe and I agreed on in our meeting today). With the example cane, that splits it into about 6 segments. 
+
+Next, we should work on the pipeline for putting these canes into the simulation framework. 
+
+
 8/26/25:
 
 Oops, it's been a while since I recorded anything. (Also I took about a week off in the interim there.) Have been working on importing Cindy's B-splines and also matching them up with the actual canes. 
@@ -22,9 +38,9 @@ Right now I have a jupyter notebook that imports one of the canes as both a json
 
 To do:
 
-- [] fully automate that process (automatically generate the knot vector and plot between which numbers)
+- [x] fully automate that process (automatically generate the knot vector and plot between which numbers)
 - [] "zero" the spline so it starts somewhere closer to (0, 0, 0) in space
-- [] Do we start with the first and last points in the spline as the initial points for the segmentation?
+- [x] Do we start with the first and last points in the spline as the initial points for the segmentation?
 
 
 8/12/25:
