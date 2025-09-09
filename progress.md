@@ -12,6 +12,43 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+9/8/25:
+
+Plugged segment lengths into CaneEditor to generate canes with BSpline segment lengths. Had to make a couple edits to deal with different length segments. 
+
+9/4/25:
+
+- [x] Get the lengths of each segment in the chain
+
+This was pretty easy with np.linalg.norm. Verified with the distance function. 
+
+9/3/25:
+
+- [x] make the spline code into a python script (class?) that can be called in from the branch script
+
+Since we really just need two inputs (the files containing the json/obj files) and one output (an array of the segment end points), I left it as a python script with one function containing the useful process. 
+
+- [x] convert everything to m instead of cm
+
+Very easy as a numpy array. 
+
+- [x] Reorient the segment chain so that +z in the OBJ file is now the same direction as the probe movement
+
+The two frames are aligned as follows:
+- +x in mujoco is +z in camera ("forwards")
+- +y in mujoco is -x in camera ("left")
+- +z in mujoco is -y in camera ("up") (y was down in camera)
+
+
+8/28/25:
+
+Things we need to do to pipe this into the simulation:
+- [x] make the spline code into a python script (class?) that can be called in from the branch script
+- [x] convert everything to m instead of cm
+- [x] Get the lengths of each segment in the chain
+- [x] Reorient the segment chain so that +z in the OBJ file is now the same direction as the probe movement
+- [] get the angles of each segment in the chain wrt the previous segment
+
 8/27/25:
 
 
