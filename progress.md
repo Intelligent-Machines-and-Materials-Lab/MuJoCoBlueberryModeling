@@ -12,9 +12,26 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+9/9/25:
+
+- [x] get the angles of each segment in the chain wrt the previous segment (or at least a first pass)
+
+next, should verify using the sites that the angles actually put everything in the right spot. 
+
+It was not very close, definitely did some math wrong. Took a second pass at it by using scipy to get the rotation matrix between the two vectors, and then using the X and Y euler angles. This is REALLY close but not spot on -- I wonder if it's the order of operations in the building that's causing the discrepancy. Something I'll have to look into tomorrow. 
+
+Next up:
+- [] verify using sites that the angles actually put everything in the right spot
+- [] ask Cindy: what do the radius numbers actually mean? And then implement a way to get radius numbers in there
+- [] how do we use regression to get the stiffness values for the tree? What assumptions do we want to make about how the stiffness changes? 
+- [] once the inertia is right, fix the controller
+
+
 9/8/25:
 
 Plugged segment lengths into CaneEditor to generate canes with BSpline segment lengths. Had to make a couple edits to deal with different length segments. 
+
+-[x] First pass at angles being implem
 
 9/4/25:
 
@@ -47,7 +64,7 @@ Things we need to do to pipe this into the simulation:
 - [x] convert everything to m instead of cm
 - [x] Get the lengths of each segment in the chain
 - [x] Reorient the segment chain so that +z in the OBJ file is now the same direction as the probe movement
-- [] get the angles of each segment in the chain wrt the previous segment
+- [x] get the angles of each segment in the chain wrt the previous segment
 
 8/27/25:
 
@@ -76,7 +93,7 @@ Right now I have a jupyter notebook that imports one of the canes as both a json
 To do:
 
 - [x] fully automate that process (automatically generate the knot vector and plot between which numbers)
-- [] "zero" the spline so it starts somewhere closer to (0, 0, 0) in space
+- [x] "zero" the spline so it starts somewhere closer to (0, 0, 0) in space
 - [x] Do we start with the first and last points in the spline as the initial points for the segmentation?
 
 
