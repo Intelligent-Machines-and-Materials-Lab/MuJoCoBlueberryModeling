@@ -93,27 +93,7 @@ def get_segment_lengths(segments):
         lengths.append(length)
     return lengths
 
-def get_euler_angles_between_segments(segments):
-    """
-    Calculates the x- and y- euler angles between each segment in a list of segments in radians
-    """
-     # Initialize with zeros for the first segment
-    z_dir = np.array([0, 0, -1])
-    angles = np.zeros((len(segments)-1, 2)) 
-    segments = np.vstack([z_dir, segments])
-    for i in range(1, len(segments) - 1):
-        seg1 = segments[i] - segments[i - 1]
-        seg2 = segments[i + 1] - segments[i]
 
-        rotation, rmsd = R.align_vectors([seg2], [seg1])
-        rotmat = rotation.as_matrix()
-        euler_angles = rotation.as_euler('xyz', degrees=False)
-        # print(f"Segment {i}: from {seg1} to {seg2} with rotation matrix:\n{rotmat}\nand euler angles (rad): {euler_angles}")
-
-
-        angles[i-1] = euler_angles[0:2]
-        # print(f"Returning angles:\n{euler_angles[0:2]}")
-    return angles
 
 def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
     # Load B-spline data from JSON file
