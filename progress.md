@@ -12,6 +12,12 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+11/11/25
+
+Okay, the inertia IS right. It looked like the inertias weren't setting correctly, but in reality, it was just Python not showing them because the values were so small. They ARE being calculated. They are just... itty bitty. The diameter of the branches is about a centimeter, and the density of the branch is 0.55 g/cm3, so consider that the entire 0.5m long branch is actually only, like, 27 grams total of mass. 
+
+Using an implicit solver stabilized the crazy accelerations when no forces were involved. Hopefully that's a good sign onces there are forces on it. 
+
 9/9/25:
 
 - [x] get the angles of each segment in the chain wrt the previous segment (or at least a first pass)
