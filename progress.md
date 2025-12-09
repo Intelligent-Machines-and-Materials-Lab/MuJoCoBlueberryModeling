@@ -27,7 +27,7 @@ next, should verify using the sites that the angles actually put everything in t
 It was not very close, definitely did some math wrong. Took a second pass at it by using scipy to get the rotation matrix between the two vectors, and then using the X and Y euler angles. This is REALLY close but not spot on -- I wonder if it's the order of operations in the building that's causing the discrepancy. Something I'll have to look into tomorrow. 
 
 Next up:
-- [] verify using sites that the angles actually put everything in the right spot
+- [x] verify using sites that the angles actually put everything in the right spot
 - [] ask Cindy: what do the radius numbers actually mean? And then implement a way to get radius numbers in there
 - [] how do we use regression to get the stiffness values for the tree? What assumptions do we want to make about how the stiffness changes? 
 - [] once the inertia is right, fix the controller
