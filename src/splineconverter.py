@@ -5,6 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skspatial.objects import Line
 from scipy.spatial.transform import Rotation as R
+from pytransform3d import rotations as pr
+from pytransform3d import transformations as pt
+from pytransform3d.transform_manager import TransformManager
 import json
 import bisect
 
@@ -93,6 +96,72 @@ def get_segment_lengths(segments):
         lengths.append(length)
     return lengths
 
+def get_angles_between_segments(segments):
+    """
+    Calculates the x- and y- euler angles between each segment in a list of segments in radians.
+    Every joint is expressed in the previous joint's local frame.
+
+    segments: (M,3) array of segment endpoints (world frame), ordered base->tip
+    returns: (M,2) angles for joints between the (virtual) base and each segment:
+             angles[k] is the (x,y) rotation at joint between segment k and k+1
+    Note: Hannah wrote the base version for three segments; CoPilot generalized to N segments. 
+    """
+    seg_zero = np.array([0.0, 0.0, -1.0])            # virtual previous point for the first real link
+    pts = np.vstack([seg_zero, np.asarray(segments, dtype=float)])  # (N,3) points in world frame
+    n_links = len(pts) - 1
+    if n_links <= 1:
+        return np.zeros((0, 2))
+
+    angles = np.zeros((n_links - 1, 2))
+    # store transforms that map a joint-local frame -> world frame (4x4 homogeneous)
+    local_to_world_transforms = []
+
+    # helper to make homog points
+    homog_pts_world = pt.vectors_to_points(pts)  # Nx4
+
+    for i in range(1, len(pts) - 1):
+        if i == 1:
+            # compute in world frame for the first joint
+            seg1 = pts[i] - pts[i - 1]
+            seg2 = pts[i + 1] - pts[i]
+            rotation, _ = R.align_vectors([seg2], [seg1])
+            int_euler_angles = rotation.as_euler('xyz', degrees=False)
+            angles[i - 1] = int_euler_angles[0:2]
+
+            # build joint-local->world transform for J1:
+            R1 = pr.matrix_from_euler([int_euler_angles[0], int_euler_angles[1], 0],
+                                      0, 1, 2, extrinsic=False)
+            trans_to_new_coord_frame = np.array(pts[i + 1])
+            local_to_world = pt.transform_from(R1, trans_to_new_coord_frame)  # local->world
+            local_to_world_transforms.append(local_to_world)
+        else:
+            # transform all world points into the previous joint's local frame
+            prev_local_to_world = local_to_world_transforms[-1]
+            prev_world_to_local = pt.invert_transform(prev_local_to_world)
+            homog_pts_prev = pt.transform(prev_world_to_local, homog_pts_world)  # Nx4 in previous local frame
+            pts_prev = homog_pts_prev[:, 0:3]
+
+            # compute segment vectors in prev-local frame
+            seg1 = pts_prev[i] - pts_prev[i - 1]
+            seg2 = pts_prev[i + 1] - pts_prev[i]
+
+            # align seg2 to seg1 in prev-local frame
+            rotation, _ = R.align_vectors([seg2], [seg1])
+            int_euler_angles = rotation.as_euler('xyz', degrees=False)
+            angles[i - 1] = [int_euler_angles[0], int_euler_angles[1]]
+
+            # build this joint's local->world transform:
+            Rj = pr.matrix_from_euler([int_euler_angles[0], int_euler_angles[1], 0],
+                                      0, 1, 2, extrinsic=False)
+            # translation of the new local frame origin expressed in previous-local coords:
+            trans_prev_local = np.array(pts_prev[i + 1])
+            # combine: prev_local -> world = prev_local_to_world; this_local -> prev_local = transform_from(Rj, trans_prev_local)
+            this_local_to_prev_local = pt.transform_from(Rj, trans_prev_local)
+            # this_local -> world = prev_local_to_world @ this_local_to_prev_local
+            this_local_to_world = prev_local_to_world @ this_local_to_prev_local
+            local_to_world_transforms.append(this_local_to_world)
+
+    return angles
 
 
 def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
@@ -174,3 +243,4 @@ def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
     # plt.draw()
 
         # plt.pause(1)
+
