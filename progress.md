@@ -12,6 +12,16 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+12/9/25
+
+Taking away the print statement was making the simulation unstable. I knocked the PID values for the controller WAY WAY down, and that seems to have done the trick for now. 
+
+- [] Implement a way to get radius numbers in there
+- [] Talk to Miranda about stiffnesses for the tree (scheduled for Thursday at 3)
+- [] once the stiffnesses are right, fix the controller
+
+```diamdataparsing.ipynb``` has some noodling about, taking a look at the diameter data and creating linear fits. All the linear fits decrease the diameter as the height goes up, so we should be good on that front. 
+
 11/11/25
 
 Okay, the inertia IS right. It looked like the inertias weren't setting correctly, but in reality, it was just Python not showing them because the values were so small. They ARE being calculated. They are just... itty bitty. The diameter of the branches is about a centimeter, and the density of the branch is 0.55 g/cm3, so consider that the entire 0.5m long branch is actually only, like, 27 grams total of mass. 
