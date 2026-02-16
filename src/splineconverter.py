@@ -10,6 +10,7 @@ from pytransform3d import transformations as pt
 from pytransform3d.transform_manager import TransformManager
 import json
 import bisect
+import pandas as pd
 
 np.set_printoptions(precision=3, suppress=True, linewidth=100)
 
@@ -163,6 +164,58 @@ def get_angles_between_segments(segments):
 
     return angles
 
+def segment_curve_from_cloudcompare(filepath, make_plot=False):
+    # load txt file
+    curve_df = pd.read_csv(filepath, delimiter=' ', header=None)
+    curve = curve_df.to_numpy()
+
+    #initialize segs as an ndarray of the first and last points of the obj_spline
+    segs = np.array([curve[0,:], curve[-1,:]])
+
+    # set up judgement curve as 20 evenly spaced points along the original curve, excluding the endpoints
+    judgement_pts = np.linspace(0, curve.shape[0]-1, 22, dtype=int)[1:-2]
+    judgement_curve = curve[judgement_pts]
+
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+
+    # iterate until MSE is below 5mm or we have 12 segments
+    i = 1
+    while RMSE > 5 and len(segs) < 12:
+        random_points = np.random.randint(0, curve.shape[0], 20)
+        random_curve = curve[random_points]
+        random_dists = get_distances_between_curve_and_segments(random_curve, segs)
+
+        furthest_idx = np.argmax(random_dists)
+        new_point = random_curve[furthest_idx]
+        # print(f"Largest distances from random points to segments: {np.max(random_dists):.3f} at {random_curve[np.argmax(random_dists)]}")
+
+        # insert new point into segs
+        existing_yvals= segs[:,1]
+        idx = bisect.bisect_right(existing_yvals, new_point[1])
+        segs = np.insert(segs, idx, new_point, axis=0)
+
+        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+        # print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+        i += 1
+
+    if make_plot:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(curve[:, 0], curve[:, 1], curve[:, 2], color='#0072B2', lw=2, label='Arbitrary BSpline Curve')
+        # ax.plot(judgement_curve[:, 0], judgement_curve[:, 1], judgement_curve[:, 2], color='#D55E00', lw=2, label='Judgement Curve')
+        ax.plot(segs[:, 0], segs[:, 1], segs[:, 2], color='#009E73', lw=2, label='Segmented Curve')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.legend(loc='best')
+        ax.set_aspect('equal', adjustable='box')
+
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    # print(f"Final RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+    # print(f"Final segment endpoints:\n{segs}")
+    return segs
 
 def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
     # Load B-spline data from JSON file
