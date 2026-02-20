@@ -171,6 +171,7 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
 
     #initialize segs as an ndarray of the first and last points of the obj_spline
     segs = np.array([curve[0,:], curve[-1,:]])
+    print(f"Initial segment endpoints:\n{segs}")
 
     # set up judgement curve as 20 evenly spaced points along the original curve, excluding the endpoints
     judgement_pts = np.linspace(0, curve.shape[0]-1, 22, dtype=int)[1:-2]
@@ -194,10 +195,11 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
         existing_yvals= segs[:,1]
         idx = bisect.bisect_right(existing_yvals, new_point[1])
         segs = np.insert(segs, idx, new_point, axis=0)
+        # print(f"Segment endpoints after iteration {i}:\n{segs}")
 
-        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-        # print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
-        i += 1
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+    #     i += 1
 
     if make_plot:
         fig = plt.figure()
