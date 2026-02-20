@@ -1,11 +1,231 @@
+## What are these notes?
+
+These are Hannah's running notes about what's going on in development. It's not really meant to be public, but it was the easiest way to keep track of what needed to be worked on and what was still in progress on a day to day basis. If you've made it here by accident, enjoy Hannah's ramblings on how this got developed. Don't expect anything useful about how to use the code on this page. 
+
 ## Helpful Links
 | Description | Link |
 | ----------- | ---- |
 | Everything you can put in an MJDF file | [XML Reference](https://mujoco.readthedocs.io/en/stable/XMLreference.html#) |
 | Procedurally adding things to an MJDF file | [Tree MJDF Example](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=Y4rV2NDh92Ga) |
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
+| Resource on B-spline knots | [Drexel Slides](https://www.cs.drexel.edu/~deb39/Classes/CS430/Lectures/L-09_BSplines_NURBS.pdf) |
 
 ## Running Log
+
+12/9/25
+
+Taking away the print statement was making the simulation unstable. I knocked the PID values for the controller WAY WAY down, and that seems to have done the trick for now. 
+
+- [] Implement a way to get radius numbers in there
+- [] Talk to Miranda about stiffnesses for the tree (scheduled for Thursday at 3)
+- [] once the stiffnesses are right, fix the controller
+
+```diamdataparsing.ipynb``` has some noodling about, taking a look at the diameter data and creating linear fits. All the linear fits decrease the diameter as the height goes up, so we should be good on that front. 
+
+11/11/25
+
+Okay, the inertia IS right. It looked like the inertias weren't setting correctly, but in reality, it was just Python not showing them because the values were so small. They ARE being calculated. They are just... itty bitty. The diameter of the branches is about a centimeter, and the density of the branch is 0.55 g/cm3, so consider that the entire 0.5m long branch is actually only, like, 27 grams total of mass. 
+
+Using an implicit solver stabilized the crazy accelerations when no forces were involved. Hopefully that's a good sign onces there are forces on it. 
+
+9/9/25:
+
+- [x] get the angles of each segment in the chain wrt the previous segment (or at least a first pass)
+
+next, should verify using the sites that the angles actually put everything in the right spot. 
+
+It was not very close, definitely did some math wrong. Took a second pass at it by using scipy to get the rotation matrix between the two vectors, and then using the X and Y euler angles. This is REALLY close but not spot on -- I wonder if it's the order of operations in the building that's causing the discrepancy. Something I'll have to look into tomorrow. 
+
+Next up:
+- [x] verify using sites that the angles actually put everything in the right spot
+- [] ask Cindy: what do the radius numbers actually mean? And then implement a way to get radius numbers in there
+- [] how do we use regression to get the stiffness values for the tree? What assumptions do we want to make about how the stiffness changes? 
+- [] once the inertia is right, fix the controller
+
+
+9/8/25:
+
+Plugged segment lengths into CaneEditor to generate canes with BSpline segment lengths. Had to make a couple edits to deal with different length segments. 
+
+-[x] First pass at angles being implem
+
+9/4/25:
+
+- [x] Get the lengths of each segment in the chain
+
+This was pretty easy with np.linalg.norm. Verified with the distance function. 
+
+9/3/25:
+
+- [x] make the spline code into a python script (class?) that can be called in from the branch script
+
+Since we really just need two inputs (the files containing the json/obj files) and one output (an array of the segment end points), I left it as a python script with one function containing the useful process. 
+
+- [x] convert everything to m instead of cm
+
+Very easy as a numpy array. 
+
+- [x] Reorient the segment chain so that +z in the OBJ file is now the same direction as the probe movement
+
+The two frames are aligned as follows:
+- +x in mujoco is +z in camera ("forwards")
+- +y in mujoco is -x in camera ("left")
+- +z in mujoco is -y in camera ("up") (y was down in camera)
+
+
+8/28/25:
+
+Things we need to do to pipe this into the simulation:
+- [x] make the spline code into a python script (class?) that can be called in from the branch script
+- [x] convert everything to m instead of cm
+- [x] Get the lengths of each segment in the chain
+- [x] Reorient the segment chain so that +z in the OBJ file is now the same direction as the probe movement
+- [x] get the angles of each segment in the chain wrt the previous segment
+
+8/27/25:
+
+
+- [x] fully automate that process (automatically generate the knot vector and plot between which numbers)
+
+Used ```bisect.bisect_right()``` and ```np.insert()``` to automate inserting the new joints into the segment chain. 
+
+- [x] Do we start with the first and last points in the spline as the initial points for the segmentation?
+
+Must have been tired when I wrote this one, the answer is clearly yes.
+
+Right now the process runs this segmentation until the RMSE is 0.2 (which is 2mm) and then stops (which is what Joe and I agreed on in our meeting today). With the example cane, that splits it into about 6 segments. 
+
+Next, we should work on the pipeline for putting these canes into the simulation framework. 
+
+
+8/26/25:
+
+Oops, it's been a while since I recorded anything. (Also I took about a week off in the interim there.) Have been working on importing Cindy's B-splines and also matching them up with the actual canes. 
+
+Right now I have a jupyter notebook that imports one of the canes as both a json file and an obj file and plots them together:
+
+![A b-spline denoted with pink points, overlaid on a blue spline. The blue spline is the reconstructed spline from the json file; the pink points are the imported OBJ vertices. Six control points are shown in orange.](images/bsplineimportplot.png)
+
+To do:
+
+- [x] fully automate that process (automatically generate the knot vector and plot between which numbers)
+- [x] "zero" the spline so it starts somewhere closer to (0, 0, 0) in space
+- [x] Do we start with the first and last points in the spline as the initial points for the segmentation?
+
+
+8/12/25:
+
+- [x] a metric for comparing the discretizations against each other for how well they describe the curve
+
+Turns out I was not having that much trouble with math, I was just not plotting things on an equal-axis graph, which was leading me to believe I was having trouble with math. Oops. But that package was very useful. The current iteration of ```bspline.ipynb``` takes a series of segments (as a series of coordinates in space) and a b-spline curve, takes 20 evenly spaced points along the curve, calculates the minimum distance to any segment, and uses that as the "error" to create a MSE. All that's for is to have some metric to compare different segment patterns against each other on how well they fit the curve. 
+
+8/11/25:
+
+- [] take an arbitrary b-spline curve and make it into a series of links
+
+Got a note from Cindy that she's actually planning to export B-splines instead of Bezier curves, so switching to look at those instead. Read up a little on B-splines. 
+
+Alright, this also needs to be broken down into a few steps. There are a number of different ways that we can go about this. A few things we'll need first though:
+- [x] a way to plot a potential discretization of a b-spline curve
+- [] a metric for comparing the discretizations against each other for how well they describe the curve
+
+Like an absolute loser I'm having trouble with the math for getting the shortest distance from the curve to the line. The current direction I'm heading in is having a set of points on the curve and getting their minimum distance to the line segments (maybe via projection?). There's maybe a helpful scikit tool: https://scikit-spatial.readthedocs.io/en/stable/api_reference/Line/methods/skspatial.objects.Line.project_point.html
+
+8/7/25:
+
+- [x] add error for edge cases of probe height (too high specifically)
+
+Simple check for too tall overall (longer than total length of branch) or exceeds length of segment.
+
+- [] figure out what that error is regarding the rotation matrix
+
+... Now that I'm trying to fix it, I can't replicate the error -_-
+
+- [x] why doesn't it accept cylinders??
+
+The documentation said a cylinder could be defined by 2 values, radius and half-length. But apparently when defining it programatically, it wants 3 values anyway; the last one can just be 0. Personally I think the 0 should go in the middle, so that the last value is consistently the half-length regardless of the geometry, but that's just me. 
+
+However, we run into a problem: If the branches are cylinders, then the probe can easily "slip off" the side. So, we can add a crossbar to the probe. But then we add back in the problem where the branch "breaks through" the collision object of the crossbar, and starts colliding with the long bar of the probe instead. Colliding with the middle of the bar instead of the end of a bar just makes for different dynamics... Because we're going to run into different problems with different branches, I think it might actually be better to leave the branch as a box for now and just deal with the inertia being slightly off (maybe by making it slightly skinnier) rather than deal with the wonky collisions. At least in the one example I had up while I was changing them, box branches + capsule probe had no break-throughs and no slipping of the probe, whereas a box probe and cylinder branches slipped at 17s and a crossguard probe broke through at 40s. 
+
+So I'm going to leave it as is for now. If we want to switch it back, the steps are:
+- switch ```type=mujoco.mjtGeom.mjGEOM_BOX, size=[radius, radius, segment_length/2]``` to ```type=mujoco.mjtGeom.mjGEOM_CYLINDER, size=[radius, segment_length/2, 0]``` when adding branches. In ```CaneEditor.redefine_probe```, ```contact_branch_length = geoms[0].size[2]``` needs to be switched to ```size[1]```. And then go into ```branch_base.xml```, add back in the crossbar geometry, and change it back to a box. 
+
+- [x] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
+
+Added a few more methods to CaneEditor to set branch angles based on the joint name and not by the joint index. The methods now available are:
+
+```offset_joint_by_name(self, joint_name, angle)``` Takes the exact joint name, i.e. "branch_joint_x0", and the angle. 
+
+```offset_joint_by_dir_and_number(self, joint_dir, joint_number, angle)``` is a little less verbose, taking 'x' and '0' instead and concatenating them together. After making it, I'm not actually sure how helpful it's going to be, except for when I forget what the branch joints are actually called. 
+
+```offset_all_joints_in_direction(self,  direction, angles)``` takes a direction "x" and a list of angles and offsets all of them together. The length of `angles` has to be the same as the number of segments in the tree. 
+
+```randomize_joint_angles(self)``` does what it sounds like. Right now it's a normal distribution about 0 radians with a standard deviation of 0.2 radians. It randomizes both the x and y joints. 
+
+To consolidate some of the remaining to-dos:
+
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] modify the controller to be more robust (it's currently not great for these 3D canes) (or just wait until we have something more concrete, because it seems like this changes every time we make a change to the model)
+- [] figure out what that error is regarding the rotation matrix
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+- [] take an arbitrary bezier curve and make it into a series of links
+
+
+
+8/6/25:
+
+- [x] verify the probe position still works with the simulation part of the code
+
+Something weird was happening with the initial position of the probe in the simulation. Looked into that a little more. Took out a positional offset in ```branch_base.xml``` for the geometry to make the offset math a little simpler. Ultimately, we should be able to position the probe to be in contact with the branch at the beginning of the simulation using JUST MATH. I also rounded off the probe geometry using ```capsule``` instead of ```cylinder```, so it contacts closer to the centerline of the probe instead of the bottom edge. 
+
+The math for the probe offset should be ```probe_length + probe_radius + branch_radius = 0.061```. Nominally the probe geometry should never change, so I set it to be ```0.055 + branch_radius```. 
+
+Since changed that to ```0.056 + branch_radius```, since I don't want it to start in contact, and it seemed to be starting in contact beforehand. 
+
+It also seems like we can delete the pre-process step entirely with this method. (Cries in wasted time.)
+
+Adding to the to-do list:
+
+- [] modify the controller to be more robust (it's currently not great for these 3D canes) (or just wait until we have something more concrete, because it seems like this changes every time we make a change to the model)
+- [x] add error for edge cases of probe height (too high specifically)
+- [] figure out what that error is regarding the rotation matrix
+- [x] add a more streamlined way to set all the joint offsets at once (instead of one at a time)
+
+8/5/25: 
+
+Just very distracted today...
+
+- [x] break the plotting into joints that are in line and out of line with the probe motion 
+
+Just plotting the y-axis joints, because those are the ones that should be changing the most. Continued working on probe placement. 
+
+
+8/4/25
+
+- [x] figure out where to place the probe to be in line with the branch at the initial position 
+
+With a little bit of trig, I used a "site" to figure out the xy position of the probe, given a starting bending angle of each of the joints. The method is ```redefine probe```. We could *probably* get rid of the pre-process if we wanted to, and do it all algorithmically based on this and the radius of the branch. 
+
+![A four-segment inverted pendulum, with the joints all at different angles. A green probe is near the top segment.](images/offsetprobe.png)
+
+Other things to do this week: 
+
+- [x] break the plotting into joints that are in line and out of line with the probe motion 
+- [x] verify the probe position still works with the simulation part of the code
+- [x] why doesn't it accept cylinders??
+- [] make it so that the stiffness of different joints can be changed outside the xml scripts.
+- [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
+- [] take an arbitrary bezier curve and make it into a series of links
+
+8/1/25
+
+- [x] make 3-dof rotational joints possible
+
+This actually needs further breakdown:
+
+- [x] break the plotting into joints that are in line and out of line with the probe motion 
+- [x] figure out where to place the probe to be in line with the branch at the initial position
+
 7/31/25
 
 - [x] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
@@ -16,6 +236,14 @@ This is pretty much implemented now. Things that were changed:
 - the PID controller was changed so that the feedforward controller during contact is calculated based on the offset of the probe from the contact point, not from the "zero" position. 
 - the PID controller of the velocity controller on the first simulation is just pure PID, no feedforward. (What would even go there anyway?)
 - For the first second of the second simulation, the desired position is set to just the initial position of the probe, to allow it time to settle. 
+
+- [] make 3-dof rotational joints possible
+
+Made a new branch. 
+
+Okay, maybe this is a misnomer. It doesn't actually have to... twist about the z axis. 
+
+As a first pass, I just added a coincident joint in the x axis at the same point as the joint on the y axis for every branch. I added a camera that looks at the system from the other direction, so that we can tell what's going on in this dimension, too. 
 
 
 7/30/25
@@ -76,7 +304,7 @@ There's now a parameter called `datacap_rate` that determines the frequency in H
 - [x] double check that the controller works all the way to 45s 
 - [x] double check that the controller works for up to 10 segment branches
 - [x] implement a branch where at least one joint is NOT 0 degrees. 
-- [] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
+- [x] figure out how to initiate the probe so that '0' degrees is touching the branch OR have a pre-process that moves the probe until it touches the branch. 
 - [] make 3-dof rotational joints possible
 - [] research question to answer: how many joints is the right number of joints? we're just putting a bunch of springs in series, so each spring makes the K value effectively weaker. 
 - [] take an arbitrary bezier curve and make it into a series of links
