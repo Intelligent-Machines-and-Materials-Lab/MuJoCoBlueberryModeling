@@ -178,7 +178,7 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
     judgement_curve = curve[judgement_pts]
 
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+    print(f"RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
 
     # iterate until MSE is below 5mm or we have 12 segments
     i = 1
@@ -196,10 +196,12 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
         idx = bisect.bisect_right(existing_yvals, new_point[1])
         segs = np.insert(segs, idx, new_point, axis=0)
         # print(f"Segment endpoints after iteration {i}:\n{segs}")
+        i += 1
 
-    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
-    #     i += 1
+        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    
+    print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
+    #     
 
     if make_plot:
         fig = plt.figure()

@@ -12,6 +12,57 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+2/19/26
+
+Should we gather some # of parameters (# links, R^2 value, etc) and run the tests on all of them, and then see what values predict how off the predicted/true values are?
+
+
+2/18/26
+
+I wonder if there's a relationship between how good the results are and how good the "linear" fit to the diameters of the canes is. 
+
+2/16/26
+
+Bush 9/Branch 1/Trial 1 has nothing in compression, so it's not a usable trial. 
+bush 23/1/3 isn't building correctly with the spline builder :( it doesn't start at (0,0,0), maybe I didn't zero it correctly in CloudCompare. For now let's just not use 23/1 as a branch until I can go back and fix it in Windows. 23/3 is also having this problem. 
+
+12/15/25
+
+Okay, so at the beginning of all this months and months ago, we estimated that a stiffness would likely be, with one joint, around 295, based on the magnitude of the forces we were seeing from the data in the field. 
+
+Just now I plugged in our little formula, k=3EI/L, with our estimated radii and an estimated E=2.0GPa as a lowball from the literature. And, what do you know, here's the stiffness that came out of that for Branch 3, Cane 1:
+
+133
+281
+130
+224
+138
+174
+113
+
+It's a really good sign that we're in the right ballpark. I think we might be a little low, since they're all under our initial estimate, but I did pick a low number in the range I had. And honestly, the fact that it's the right order of magnitude and within, like, a factor of 2, makes me super super happy :D
+
+For the record, an E between 1.5 and 4.1 is what the 1987 paper on live branches reported for pine tree branches, and what I assume would be appropriate. That averages to about 2.9, which is higher than I tried this on initially. 
+
+
+12/12/25
+
+Read a few material properties of trees papers to pin down a reasonable Youngs modulus E to use for the model. 
+
+12/11/25
+
+To summarize what Miranda and I talked about regarding beams...
+
+The model that she used in her thesis was a series of connected beams, each which used a static model where one end was fixed and the other had a force at the end. The equation for the deflection is $$ w = \frac{FL^3}{3EI} $$, where $w$ is the deflection of the end, $F$ is the force used to deflect it, $L$ is the length of the beam, $E$ is Young's modulus, and $I$ is the second moment of area of the beam. What we want to achieve is an equivalent spring stiffness for the rotational joints, which is described by the equation $$\tau = k\theta$$, where $\tau$ is the rotational torque rotating each segment, $k$ is the spring stiffness, and $\theta$ is the angle that the branch deflects in response to that torque. Equivalently, $FL = k\theta$. Since the system is so stiff and moves so little, we are going to use the small angle approximation to assume that $sin(\theta) = \theta$, so we can write 
+$$FL = k (\frac{w}{L}) $$
+$$1 = k \frac{L}{3EI} $$
+$$k = \frac{3EI}{L}$$
+
+If we ever want to go back to this and NOT make the small angle assumption, then we end up with 
+$$k = \frac{FL}{arctan(\frac{FL^2}{3EI})}$$
+
+And there's no way to cross F out of that equation, so stiffness would be dependent on the force, and we can't have that.
+
 12/9/25
 
 Taking away the print statement was making the simulation unstable. I knocked the PID values for the controller WAY WAY down, and that seems to have done the trick for now. 
