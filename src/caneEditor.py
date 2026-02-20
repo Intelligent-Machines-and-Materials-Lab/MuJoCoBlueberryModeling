@@ -20,8 +20,9 @@ from scipy.spatial.transform import Rotation as R
 BROWN = np.array([0.4, 0.24, 0.0, 1])
 
 class CaneEditor():
-    def __init__(self, xml_name):
+    def __init__(self, xml_name, flex_mod = 4.9e9):
         self.spec = mujoco.MjSpec.from_string(xml_name)
+        self.E = flex_mod  # Flexural modulus from average of 6 tested canes
 
         # default geom properties for wood branch
         self.spec.default.geom.density = 550
@@ -42,11 +43,11 @@ class CaneEditor():
         self.spec.default.site.size = np.array([0.01, 0.01, 0.01])
         self.spec.default.site.rgba = np.array([0, 0, 0, 1])
 
-    def build_branch_from_lengths(self, lengths, radii, def_stiff=295):
+    def build_branch_from_lengths(self, lengths, radii, def_stiff=295, verbose=False):
         self.num_segments = len(lengths)
         self.spec.default.joint.stiffness = def_stiff
         self.total_length = sum(lengths)
-        self.E = 4.9e9  # Flexural modulus from average of 6 tested canes
+
         self.inverted_k_list = []
 
         # find the base body
@@ -60,8 +61,9 @@ class CaneEditor():
 
         parent_body = base_body
         for i in range(self.num_segments):
-            print(f"Constructing segment {i} with length {lengths[i]:.3f} m")
-            print(f"Radius of segment would be {radii[i]:.6f} m")
+            if verbose:
+                print(f"Constructing segment {i} with length {lengths[i]:.3f} m")
+                print(f"Radius of segment would be {radii[i]:.6f} m")
             body_name = f"branch_body_{i}"
             joint_name_y = f"branch_joint_y{i}"
             joint_name_x = f"branch_joint_x{i}"
@@ -91,7 +93,8 @@ class CaneEditor():
             second_moment_area = (np.pi/4) * (radii[i]**4)
             k = 3*self.E*second_moment_area / seg_length
             self.inverted_k_list.append(1/k)
-            print(f"Estimated bending stiffness k via beam bending: {k:.1f} Nm/rad")
+            if verbose:
+                print(f"Estimated bending stiffness k via beam bending: {k:.1f} Nm/rad")
             child_body.add_joint(name=joint_name_x, axis=[1, 0, 0], stiffness=k)
             child_body.add_joint(name=joint_name_y, axis=[0, 1, 0], stiffness=k)
             child_body.add_site(name=site_name)  
@@ -106,12 +109,12 @@ class CaneEditor():
         self.model = self.spec.compile()
         self.k_eq = (sum(self.inverted_k_list))**(-1)
 
-        print("\nFinal body inertias:")
-        for b in range(self.model.nbody):
-            m = self.model.body_mass[b]
-            if m > 0:
-                I_xx, I_yy, I_zz = self.model.body_inertia[b]
-                print(f"  body {b} ({self.model.body(b).name}): mass={m:.6g} kg, inertia=[{I_xx:.6f}, {I_yy:.6f}, {I_zz:.6f}]")
+        # print("\nFinal body inertias:")
+        # for b in range(self.model.nbody):
+        #     m = self.model.body_mass[b]
+        #     if m > 0:
+        #         I_xx, I_yy, I_zz = self.model.body_inertia[b]
+        #         print(f"  body {b} ({self.model.body(b).name}): mass={m:.6g} kg, inertia=[{I_xx:.6f}, {I_yy:.6f}, {I_zz:.6f}]")
 
             
     def build_branch(self, total_length, num_segments=2, radius=0.006, def_stiff=295):

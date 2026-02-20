@@ -219,7 +219,7 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
     # print(f"Final RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
     # print(f"Final segment endpoints:\n{segs}")
-    return segs
+    return segs, RMSE
 
 def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
     # Load B-spline data from JSON file
