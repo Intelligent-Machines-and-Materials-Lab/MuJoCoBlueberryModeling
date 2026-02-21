@@ -351,6 +351,17 @@ class CaneEditor():
             # print(f"Default camera position: {cam.pos}")
             media.show_image(renderer.render())
 
+    def save_picture_of_model(self, pos, filename):
+        """
+        Saves an image of the model at the given position to filename
+        """
+        data = mujoco.MjData(self.model)
+        data.qpos[:] = pos  
+        with mujoco.Renderer(self.model, height=480, width=640) as renderer:
+            mujoco.mj_forward(self.model, data)
+            renderer.update_scene(data)
+            media.write_image(filename, renderer.render(), fmt='pdf')
+
 
     def show_model_at_pos_with_camera(self, pos, cam_id=0):
         """
