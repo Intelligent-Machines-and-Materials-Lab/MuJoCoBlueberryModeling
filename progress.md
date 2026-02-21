@@ -12,6 +12,12 @@ These are Hannah's running notes about what's going on in development. It's not 
 
 ## Running Log
 
+2/20/26
+
+Bush 9/branch2 doesn't always increasing in the z direction, which is why my segmenting algorithm doesn't like it. 
+
+Bush 23 is just COMPLETLEY UPSIDE DOWN in Cloud Compare, probably because it was the first one I was messing with ages ago, but the polylines look well formed. Just have to flip them somehow. 
+
 2/19/26
 
 Should we gather some # of parameters (# links, R^2 value, etc) and run the tests on all of them, and then see what values predict how off the predicted/true values are?
