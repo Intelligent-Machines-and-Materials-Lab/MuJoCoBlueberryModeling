@@ -25,7 +25,7 @@ class CaneEditor():
         self.E = flex_mod  # Flexural modulus from average of 6 tested canes
 
         # default geom properties for wood branch
-        self.spec.default.geom.density = 550
+        self.spec.default.geom.density = 580 # kg/m^3 from Zhang
         self.spec.default.geom.solref = [0.1, 1]
         self.spec.default.geom.solimp = [0.95, 1, 0.0025, 1, 0.5]
         self.spec.default.geom.friction = [0, 0, 0]

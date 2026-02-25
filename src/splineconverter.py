@@ -182,7 +182,7 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
 
     # iterate until MSE is below 5mm or we have 12 segments
     i = 1
-    while RMSE > 5 and len(segs) < 12:
+    while RMSE > 2 and len(segs) < 12:
         random_points = np.random.randint(0, curve.shape[0], 20)
         random_curve = curve[random_points]
         random_dists = get_distances_between_curve_and_segments(random_curve, segs)
