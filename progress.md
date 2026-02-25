@@ -9,6 +9,7 @@ These are Hannah's running notes about what's going on in development. It's not 
 | Procedurally adding things to an MJDF file | [Tree MJDF Example](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb#scrollTo=Y4rV2NDh92Ga) |
 | Density of a plant branch (0.55 g/cm^3) | [Wood Density and Fiber Dimensions of Populus Ussuriensis](https://bioresources.cnr.ncsu.edu/resources/wood-density-and-fiber-dimensions-of-root-stem-and-branch-wood-of-populus-ussuriensis-kom-trees/#:~:text=The%20root%20wood%20had%20the%20highest%20average%20density%20(0.596%20g,/cm3)%20) |
 | Resource on B-spline knots | [Drexel Slides](https://www.cs.drexel.edu/~deb39/Classes/CS430/Lectures/L-09_BSplines_NURBS.pdf) |
+| Colorblind friendly colormaps |  [Info PDF](https://www.fabiocrameri.ch/ws/media-library/ce2eb6eee7c345f999e61c02e2733962/readme_scientificcolourmaps.pdf) |
 
 ## Running Log
 
