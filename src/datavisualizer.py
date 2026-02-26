@@ -2,6 +2,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import cmcrameri.cm as cm
+import numpy as np
 
 def load_metadata(file_path):
     # Read CSV directly with pandas, automatically inferring numeric types
@@ -98,15 +99,72 @@ def plot_error_data_as_boxplots(metadata_df):
     for i, median in enumerate(medians):
         ax.text(i + 1, median, f'{median:.2f}', ha='center', va='bottom', fontsize=10, color='C0')
     plt.show()
+
+def plot_push_data(bush_num, branch_num, trial_num):
+    # Load the corresponding push data file based on the bush, branch, and trial numbers
+    file_path = f"data/cropped_push_data/bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.csv"
+    push_data_df = pd.read_csv(file_path)
     
+    # Plot the push data (e.g., force vs displacement)
+    plt.figure(figsize=(5, 3))
+    plt.plot(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], color=cm.batlow(0.0), label='Field Data')
+    plt.xlabel('Displacement (mm)')
+    plt.ylabel('Force (N)')
+    # plt.title(f'Push Data for Bush {bush_num}, Branch {branch_num}, Trial {trial_num}')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    # plt.show()
+
+    # save png to images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png
+    plt.savefig(f"images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
+
+def plot_push_data_with_regression_line(bush_num, branch_num, trial_num):
+    # Load the corresponding push data file based on the bush, branch, and trial numbers
+    file_path = f"data/cropped_push_data/bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.csv"
+    push_data_df = pd.read_csv(file_path)
+
+    # Perform linear regression
+    fd_linearfit = np.polyfit(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], 1)
+    def get_force_at_disp(disp_in_mm):
+        force = fd_linearfit[0]*disp_in_mm + fd_linearfit[1]
+        return force
+    
+    # Plot the push data (e.g., force vs displacement)
+    plt.figure(figsize=(5, 3))
+    plt.plot(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], color=cm.batlow(0.0), label='Field Data')
+    plt.plot(push_data_df['Displacement (mm)'], get_force_at_disp(push_data_df['Displacement (mm)']), label='Field Data Linear Fit', linestyle='--', color=cm.batlow(0.75))
+    plt.xlabel('Displacement (mm)')
+    plt.ylabel('Force (N)')
+    # plt.title(f'Push Data for Bush {bush_num}, Branch {branch_num}, Trial {trial_num}')
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    # plt.show()
+
+    # save png to images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png
+    plt.savefig(f"images/forcedisplacementplots/pushdataWregression_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
 
 if __name__ == '__main__':
-    metadata_df = load_metadata('data/results/metadata_2026-02-23_23-10.csv')
+    # metadata_df = load_metadata('data/results/metadata_2026-02-23_23-10.csv')
     # metadata_df = load_metadata('data/results/metadata_2026-02-23_11-39.csv')
-    metadata_df = add_bush_idx(metadata_df)
-    metadata_df = add_height_str_labels(metadata_df)
-    metadata_df = add_full_labels(metadata_df)
-    # print(metadata_df)
+    # metadata_df = add_bush_idx(metadata_df)
+    # metadata_df = add_height_str_labels(metadata_df)
+    # metadata_df = add_full_labels(metadata_df)
     # plot_slope_data_as_scatterplot(metadata_df)
     # plot_error_data_as_boxplots(metadata_df)
-    plot_slope_data_as_columns(metadata_df)
+    # plot_slope_data_as_columns(metadata_df)
+
+    plot_push_data_with_regression_line(1, 1, 1)
+    plot_push_data_with_regression_line(1, 1, 3)
+    plot_push_data_with_regression_line(1, 2, 2)
+    plot_push_data_with_regression_line(1, 3, 1)
+    plot_push_data_with_regression_line(1, 3, 3)
+    plot_push_data_with_regression_line(3, 2, 1)
+    plot_push_data_with_regression_line(3, 3, 1)
+    plot_push_data_with_regression_line(5, 3, 1)
+    plot_push_data_with_regression_line(5, 3, 3)
+    plot_push_data_with_regression_line(9, 3, 3)
+    plot_push_data_with_regression_line(23, 1, 3)
+    plot_push_data_with_regression_line(23, 2, 3)
+    
