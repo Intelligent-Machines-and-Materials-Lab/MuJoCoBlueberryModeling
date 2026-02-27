@@ -10,7 +10,7 @@ def load_metadata(file_path):
 
 def add_full_labels(metadata_df):
     # add a column that combines bush, branch, and trial into a single string label with 
-    metadata_df['full_label'] = metadata_df.apply(lambda row: f"{int(row['bush'])}/{int(row['branch'])}/{row['height_label']}", axis=1)
+    metadata_df['full_label'] = metadata_df.apply(lambda row: f"{int(row['bush_idx'])}/{int(row['branch'])}/{row['height_label']}", axis=1)
     return metadata_df
 
 def add_height_str_labels(metadata_df):
@@ -28,7 +28,7 @@ def add_height_str_labels(metadata_df):
 def add_bush_idx(metadata_df):
     # Create a mapping of bush types to indices
     bush_types = metadata_df['bush'].unique()
-    bush_mapping = {bush: idx for idx, bush in enumerate(bush_types)}
+    bush_mapping = {bush: idx+1 for idx, bush in enumerate(bush_types)}
     
     # Add a new column 'bush_idx' to the DataFrame
     metadata_df['bush_idx'] = metadata_df['bush'].map(bush_mapping)
@@ -52,22 +52,45 @@ def plot_slope_data_as_columns(metadata_df):
 def plot_slope_data_as_scatterplot(metadata_df):
     # fig = plt.figure(figsize=(10, 6))
     fig, ax = plt.subplots(figsize=(18, 9))
-    ax.grid(True, linestyle='--', color='gray', alpha=0.7)
+    ax.grid(True, linestyle='--', color='gray', alpha=0.7, zorder=-1)
+    ax.set_axisbelow(True)  # Ensure grid is behind the points
     plt.plot([0,1], [0,1], color='gray', linestyle='--', zorder=0)
-    scatter = ax.scatter(metadata_df['field_stiffness'], metadata_df['sim_stiffness'], s=(3*metadata_df['branch'])**3, cmap=cm.batlow, c=metadata_df['bush_idx']) # cmap=cm.batlowKS
-    for i, txt in enumerate(metadata_df['height_label']):
-        ax.annotate(txt, (metadata_df['field_stiffness'][i]+(.002*metadata_df['branch'][i]**2), metadata_df['sim_stiffness'][i]+(.002*metadata_df['branch'][i]**2)), fontsize=16, alpha=0.7)
+    branch1df = metadata_df[metadata_df['branch'] == 1]
+    branch2df = metadata_df[metadata_df['branch'] == 2]
+    branch3df = metadata_df[metadata_df['branch'] == 3]
+
+    # Set consistent color range for all scatter plots
+    vmin = metadata_df['bush_idx'].min()
+    vmax = metadata_df['bush_idx'].max()
+
+    scatter = ax.scatter(branch1df['field_stiffness'], branch1df['sim_stiffness'], s=(10*branch1df['trial'])**2, cmap=cm.batlow, c=branch1df['bush_idx'], vmin=vmin, vmax=vmax, label='Branch 1', marker='o') # cmap=cm.batlowKS
+    scatter2 = ax.scatter(branch2df['field_stiffness'], branch2df['sim_stiffness'], s=(10*branch2df['trial'])**2, cmap=cm.batlow, c=branch2df['bush_idx'], vmin=vmin, vmax=vmax, label='Branch 2', marker='s') # cmap=cm.batlowKS
+    scatter3 = ax.scatter(branch3df['field_stiffness'], branch3df['sim_stiffness'], s=(10*branch3df['trial'])**2, cmap=cm.batlow, c=branch3df['bush_idx'], vmin=vmin, vmax=vmax, label='Branch 3', marker='^') # cmap=cm.batlowKS
+    # scatter = ax.scatter(metadata_df['field_stiffness'], metadata_df['sim_stiffness'], s=(3*metadata_df['trial'])**3, cmap=cm.batlow, c=metadata_df['bush_idx']) # cmap=cm.batlowKS
+    # for i, txt in enumerate(metadata_df['branch']):
+    #     ax.annotate(txt, (metadata_df['field_stiffness'][i]+(.002*metadata_df['branch'][i]**2), metadata_df['sim_stiffness'][i]+(.002*metadata_df['branch'][i]**2)), fontsize=16, alpha=0.7)
     
-    mylabels = ["Bush 1", "Bush 3", "Bush 5", "Bush 9", "Bush 14", "Bush 23"]
-    handles, labels = scatter.legend_elements(prop="colors", alpha=0.6)
-    legend1 = ax.legend(handles, mylabels, loc="upper left", fontsize=16)
+    bushnumlabels = ["1", "2", "3", "4", "5", "6"]
+    # Create custom legend handles for all 6 bush indices
+    from matplotlib.patches import Patch
+    legend_handles = [Patch(facecolor=cm.batlow((i-vmin)/(vmax-vmin)), alpha=1) for i in range(int(vmin), int(vmax)+1)]
+    legend1 = ax.legend(legend_handles, bushnumlabels, loc="upper left", fontsize=16, title="Bush Num", title_fontsize=16)
     ax.add_artist(legend1)
 
-    handles, labels = scatter.legend_elements(prop="sizes", func=lambda s: (s ** (1/3))/3, alpha=0.6)
-    legend2 = ax.legend(handles[::-1], labels[::-1], loc="upper right", title="Branch Num",labelspacing=1.5, fontsize=16, title_fontsize=16)
+    branchnumlabels = ["1", "2", "3"]
+    from matplotlib.lines import Line2D
+    branch_legend_handles = [Line2D([0], [0], marker='o', color='w', label=branchnumlabels[0], markerfacecolor='gray', markersize=10, alpha=0.6),
+                             Line2D([0], [0], marker='s', color='w', label=branchnumlabels[1], markerfacecolor='gray', markersize=10, alpha=0.6),
+                             Line2D([0], [0], marker='^', color='w', label=branchnumlabels[2], markerfacecolor='gray', markersize=10, alpha=0.6)]
+    branch_legend = ax.legend(handles=branch_legend_handles, loc="upper left", bbox_to_anchor=(.1, 1), fontsize=16, title="Branch Num", title_fontsize=16)
+    ax.add_artist(branch_legend)
+
+    trialloclabels = ["Low", "Middle", "High"]
+    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6)
+    legend2 = ax.legend(handles[::-1], trialloclabels, loc="upper left", bbox_to_anchor=(.215, 1), title="Trial Height",labelspacing=1.5, fontsize=16, title_fontsize=16)
     ax.tick_params(axis='both', which='major', labelsize=14)
     plt.ylim(0, 1.5)
-    plt.xlim(0, 1.05)
+    plt.xlim(0, 1.02)
     plt.xlabel('Field Stiffness (N/mm)', fontsize=16)
     plt.ylabel('Simulation Stiffness (N/mm)', fontsize=16)
     # plt.title('Field vs Simulation Average Stiffness')
@@ -86,18 +109,18 @@ def plot_error_data_as_boxplots(metadata_df):
         metadata_df['force_error_25mm'].dropna(), 
         metadata_df['force_error_30mm'].dropna()
     ]
-    labels = ['10mm', '15mm', '20mm', '25mm', '30mm']
+    labels = ['10', '15', '20', '25', '30']
     print("Data counts after removing NaNs:")
     for i, data in enumerate(error_data):
         print(f"{labels[i]}: {len(data)} values")
     newlabels = [f"{labels[i]} (n={len(data)})" for i, data in enumerate(error_data)]
     ax.set_ylabel('Force Error between Sim and Field (N)')
-    ax.set_xlabel('Branch Displacement')
-    ax.set_title('Force Error between Simulation and Field at Different Displacements')
+    ax.set_xlabel('Branch Displacement (mm)')
+    # ax.set_title('Force Error between Simulation and Field at Different Displacements')
     medians = [data.median() for data in error_data]
-    bplot = ax.boxplot(error_data, tick_labels=newlabels)
+    bplot = ax.boxplot(error_data, tick_labels=newlabels, medianprops=dict(color=cm.batlow(.65)))
     for i, median in enumerate(medians):
-        ax.text(i + 1, median, f'{median:.2f}', ha='center', va='bottom', fontsize=10, color='C0')
+        ax.text(i + 1, median, f'{median:.2f}', ha='center', va='bottom', fontsize=10, color=cm.batlow(.3))
     plt.show()
 
 def plot_push_data(bush_num, branch_num, trial_num):
@@ -155,7 +178,7 @@ if __name__ == '__main__':
     metadata_df = add_height_str_labels(metadata_df)
     metadata_df = add_full_labels(metadata_df)
     # plot_slope_data_as_scatterplot(metadata_df)
-    # plot_error_data_as_boxplots(metadata_df)
+    plot_error_data_as_boxplots(metadata_df)
     # plot_slope_data_as_columns(metadata_df)
 
     # plot_push_data(14, 1, 1)
@@ -164,6 +187,6 @@ if __name__ == '__main__':
     # plot_push_data(5, 2, 2)
     # plot_push_data_with_regression_line(23, 1, 1)
     # plot_push_data_with_regression_line(3, 2, 1)
-    plot_push_data_with_regression_line(14, 2, 1)
-    plot_push_data_with_regression_line(1, 1, 1)
+    # plot_push_data_with_regression_line(14, 2, 1)
+    # plot_push_data_with_regression_line(1, 1, 1)
     
