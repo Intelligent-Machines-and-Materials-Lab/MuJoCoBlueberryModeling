@@ -110,17 +110,17 @@ def plot_push_data(bush_num, branch_num, trial_num):
     # colors
     # 0.0 for far left column
     # 0.5 for middle left column
-    plt.plot(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], color=cm.batlow(0.0), label='Field Data')
+    plt.plot(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], color=cm.batlow(0.65), label='Field Data')
     plt.xlabel('Displacement (mm)')
-    plt.ylabel('Force (N)')
+    # plt.ylabel('Force (N)')
     # plt.title(f'Push Data for Bush {bush_num}, Branch {branch_num}, Trial {trial_num}')
-    plt.legend()
+    # plt.legend()
     plt.grid()
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
     # save png to images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png
-    # plt.savefig(f"images/forcedisplacementplots/for_paper/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
+    plt.savefig(f"images/forcedisplacementplots/for_paper/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
 
 def plot_push_data_with_regression_line(bush_num, branch_num, trial_num):
     # Load the corresponding push data file based on the bush, branch, and trial numbers
@@ -135,18 +135,18 @@ def plot_push_data_with_regression_line(bush_num, branch_num, trial_num):
     
     # Plot the push data (e.g., force vs displacement)
     plt.figure(figsize=(5, 3))
-    plt.plot(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], color=cm.batlow(0.65), label='Field Data')
-    plt.plot(push_data_df['Displacement (mm)'], get_force_at_disp(push_data_df['Displacement (mm)']), label='Field Data Linear Fit', linestyle='--', color=cm.batlow(.99))
+    plt.plot(push_data_df['Displacement (mm)'], push_data_df['Load (N)'], color=cm.batlow(0.9), label='Field Data')
+    plt.plot(push_data_df['Displacement (mm)'], get_force_at_disp(push_data_df['Displacement (mm)']), label='Field Data Linear Fit', linestyle='--', color=cm.batlow(.4))
     plt.xlabel('Displacement (mm)')
     # plt.ylabel('Force (N)')
     # plt.title(f'Push Data for Bush {bush_num}, Branch {branch_num}, Trial {trial_num}')
-    plt.legend()
+    # plt.legend()
     plt.grid()
     plt.tight_layout()
     # plt.show()
 
     # save png to images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png
-    plt.savefig(f"images/forcedisplacementplots/for_paper/pushdataWregression_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
+    plt.savefig(f"images/forcedisplacementplots/for_paper/pushdataWregression_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}_nolegend.png", dpi=300)
 
 if __name__ == '__main__':
     metadata_df = load_metadata('data/results/metadata_2026-02-23_23-10.csv')
@@ -164,6 +164,6 @@ if __name__ == '__main__':
     # plot_push_data(5, 2, 2)
     # plot_push_data_with_regression_line(23, 1, 1)
     # plot_push_data_with_regression_line(3, 2, 1)
-    plot_push_data_with_regression_line(14, 2, 1)
+    # plot_push_data_with_regression_line(14, 2, 1)
     plot_push_data_with_regression_line(1, 1, 1)
     
