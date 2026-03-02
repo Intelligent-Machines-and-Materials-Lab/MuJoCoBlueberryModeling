@@ -241,7 +241,7 @@ def plot_push_data(bush_num, branch_num, trial_num, make_legend=True, ax=None):
     # plt.show()
 
     # save png to images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png
-    # plt.savefig(f"images/forcedisplacementplots/for_paper/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
+    plt.savefig(f"images/forcedisplacementplots/for_paper/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
 
 def plot_push_data_with_regression_line(bush_num, branch_num, trial_num, make_legend=True, ax=None):
     if ax is None:
