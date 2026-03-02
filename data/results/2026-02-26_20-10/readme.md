@@ -1,0 +1,1 @@
+Code was run to generate endpoints of segments for visualization for the graphical abstract for IROS 2026. 
