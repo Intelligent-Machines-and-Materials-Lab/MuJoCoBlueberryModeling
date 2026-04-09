@@ -1,0 +1,1 @@
+Ran Bush 3 splines with measured radii and measured probe heights. Did not run Trial 1 because the probe heights were above the height of the spline itself. 

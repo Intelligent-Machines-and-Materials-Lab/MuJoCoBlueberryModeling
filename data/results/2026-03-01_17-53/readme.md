@@ -1,0 +1,1 @@
+cloudcompare run with all canes at 12 segments for bush 1.

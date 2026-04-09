@@ -73,6 +73,18 @@ def get_spline_data_from_file(filepath):
 
         return degree, control_points
     
+def get_spline_data_from_new_file(filepath, branch_num):
+    """
+    Loads B-spline data from a JSON file in the new format.
+    """
+    with open(filepath, 'r') as f:
+        data = json.load(f)
+        bsplinedata = data['crv_pts']
+        thisbranchdata = bsplinedata[branch_num-1]  # branch_num is 1-indexed in the filename, but 0-indexed in the data
+        control_points = np.array(thisbranchdata)
+
+        return control_points 
+    
 def load_obj_spline(filepath):
     """
     Loads a B-spline from an OBJ file.
@@ -178,11 +190,12 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
     judgement_curve = curve[judgement_pts]
 
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+    print(f"RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
 
     # iterate until MSE is below 5mm or we have 12 segments
     i = 1
-    while RMSE > 5 and len(segs) < 12:
+    # RMSE > 5
+    while len(segs) < 13:
         random_points = np.random.randint(0, curve.shape[0], 20)
         random_curve = curve[random_points]
         random_dists = get_distances_between_curve_and_segments(random_curve, segs)
@@ -196,10 +209,12 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
         idx = bisect.bisect_right(existing_yvals, new_point[1])
         segs = np.insert(segs, idx, new_point, axis=0)
         # print(f"Segment endpoints after iteration {i}:\n{segs}")
+        i += 1
 
-    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    print(f"RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
-    #     i += 1
+        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    
+    print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
+    #     
 
     if make_plot:
         fig = plt.figure()
@@ -217,11 +232,101 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
     # print(f"Final RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
     # print(f"Final segment endpoints:\n{segs}")
-    return segs
+    return segs, RMSE
 
-def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
+def plot_obj_file(filepath):
+    obj_spline = load_obj_spline(filepath)
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot(obj_spline[:, 0], obj_spline[:, 1], obj_spline[:, 2], color="#F529DA", label='OBJ Spline Curve')
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.legend(loc='best')
+    ax.set_aspect('equal', adjustable='box')
+
+def segment_spline_from_obj_file(obj_filepath, make_plot=False):
+    obj_spline = load_obj_spline(obj_filepath)
+    # invert literally every direction
+    trans_spline = np.zeros_like(obj_spline)
+    trans_spline[:,0] = -obj_spline[:,0].copy()  
+    trans_spline[:,1] = -obj_spline[:,1].copy()  
+    trans_spline[:,2] = -obj_spline[:,2].copy() 
+
+    # zero the first point  
+    trans_spline[:,0] -= trans_spline[0,0]
+    trans_spline[:,1] -= trans_spline[0,1]
+    trans_spline[:,2] -= trans_spline[0,2]
+
+    obj_spline = trans_spline
+    # if make_plot:
+    #     plot_obj_file(obj_filepath)
+
+    #initialize segs as an ndarray of the first and last points of the obj_spline
+    # start with the last point because of how the points are ordered
+    segs = np.array([obj_spline[-1,:], obj_spline[0,:]])
+    # print(f"Starting with endpoints {segs}")
+
+    # set up judgement curve as 20 evenly spaced points along the original curve, excluding the endpoints
+    judgement_pts = np.linspace(0, obj_spline.shape[0]-1, 22, dtype=int)[1:-2]
+    judgement_curve = obj_spline[judgement_pts]
+
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    print(f"RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
+    
+    # iterate until MSE is below 5mm or we have 12 segments
+    i = 1
+    while RMSE > .5 and len(segs) < 12:
+        random_points = np.random.randint(0, obj_spline.shape[0], 20)
+        random_curve = obj_spline[random_points]
+        random_dists = get_distances_between_curve_and_segments(random_curve, segs)
+
+        furthest_idx = np.argmax(random_dists)
+        new_point = random_curve[furthest_idx]
+        # print(f"Largest distances from random points to segments: {np.max(random_dists):.3f} at {random_curve[np.argmax(random_dists)]}")
+
+        # insert new point into segs
+        existing_yvals= segs[:,1]
+        idx = bisect.bisect_right(existing_yvals, new_point[1])
+        segs = np.insert(segs, idx, new_point, axis=0)
+        # print(f"Segment endpoints after iteration {i}:\n{segs}")
+        i += 1
+
+        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    
+    print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
+    #     
+
+    if make_plot:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(obj_spline[:, 0], obj_spline[:, 1], obj_spline[:, 2], color='#0072B2', lw=2, label='Arbitrary BSpline Curve')
+        # ax.plot(judgement_curve[:, 0], judgement_curve[:, 1], judgement_curve[:, 2], color='#D55E00', lw=2, label='Judgement Curve')
+        ax.plot(segs[:, 0], segs[:, 1], segs[:, 2], color='#009E73', lw=2, label='Segmented Curve')
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        ax.legend(loc='best')
+        ax.set_aspect('equal', adjustable='box')
+
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    # print(f"Final RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
+    # print(f"Final segment endpoints:\n{segs}")
+    return segs, RMSE
+    
+
+
+def segment_spline_from_files(json_filepath, obj_filepath, new_type=True, branch_num=1, make_plot=False):
     # Load B-spline data from JSON file
-    deg, ctrl_pts = get_spline_data_from_file(json_filepath)
+    if not new_type:
+        deg, ctrl_pts = get_spline_data_from_file(json_filepath)
+    else:
+        ctrl_pts = get_spline_data_from_new_file(json_filepath, branch_num)
+        deg = 2  # default degree for new type
+
     # Create standard knot vector
     knot_vector = np.arange(0, len(ctrl_pts)+deg+1)
 
@@ -274,7 +379,8 @@ def segment_spline_from_files(json_filepath, obj_filepath, make_plot=False):
 
     # iterate until MSE is below 2mm or we have 12 segments
     i = 1
-    while RMSE > 0.2 and len(segs) < 12:
+    # RMSE > 0.2
+    while len(segs) < 5:
         random_points = np.random.uniform(deg, p_end, 20)
         random_curve = np.vstack((spl_x(random_points), spl_y(random_points), spl_z(random_points))).T  
         random_dists = get_distances_between_curve_and_segments(random_curve, segs)
