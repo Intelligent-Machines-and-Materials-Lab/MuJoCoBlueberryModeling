@@ -44,6 +44,12 @@ class CaneEditor():
         self.spec.default.site.rgba = np.array([0, 0, 0, 1])
 
     def build_branch_from_lengths(self, lengths, radii, def_stiff=295, verbose=False):
+        """
+        Procedurally builds the MJDF with the specified segment lengths and radii. Assumes no branching. 
+        Calculates bending stiffnes based on beam bending theory and sets the joint stiffness accordingly.
+        lengths: list of segment length in meters
+        radii: list of segment radius in meters (assumes circular cross-section)
+        """
         self.num_segments = len(lengths)
         self.spec.default.joint.stiffness = def_stiff
         self.total_length = sum(lengths)
@@ -190,6 +196,7 @@ class CaneEditor():
     def offset_joint_by_name(self, joint_name, angle):
         """
         Offsets the joint angle of a specified joint by a given angle.
+        Note: this also sets the reference position for the angle. 
         """
         joints = self.spec.worldbody.find_all("joint")
         found = False
@@ -259,13 +266,10 @@ class CaneEditor():
                 data.qpos[joint.id] = joint.springref
         return data.qpos
     
-    def redefine_probe(self, probe_height, model_pos, verbose=False):
-        """ 
-        Identify the last site before the specified probe height.
-        Adds a new site at the probe height along the branch body after that site. 
-        Redefines the probe position to be a little to the left of the new site. 
+    def define_probe_site(self, probe_height, model_pos, verbose=False):
         """
-
+        Identify the last site before the specified probe height.
+        Adds a new site at the probe height along the branch body after that site."""
         # raise a value error if probe height is above the total length of the branch
         if probe_height > self.total_length:
             raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
@@ -311,17 +315,26 @@ class CaneEditor():
             if body.name == body_name:
                 geoms = body.find_all("geom")
                 if geoms:
-                    contact_branch_radius = geoms[0].size[0]  # Assuming the first geom is the branch
+                    self.probe_contact_branch_radius = geoms[0].size[0]  # Assuming the first geom is the branch
                     contact_branch_length = geoms[0].size[2]
                     if hyp2 < contact_branch_length*2:
                         body.add_site(name="probe_contact_site",
                               pos=[0, 0, hyp2],
                               rgba=[1, 0, 0, 1])
+                        if verbose:
+                            print(f"Added probe contact site to body {body_name} at local position [0, 0, {hyp2:.3f}]")
                     else:
                         raise ValueError("Probe position exceeds segment length in bent position. Please set a lower probe height.")
                 else:
                     raise ValueError(f"No geoms found in body {body_name}. Check XML definition.")
                 break
+        self.model = self.spec.compile()
+
+    
+    def move_probe_to_site(self, probe_height, model_pos, verbose=False):
+        """ 
+        Redefines the probe position to be a little to the left of the new site. 
+        """
         
         self.model = self.spec.compile()
         data = mujoco.MjData(self.model)
@@ -331,7 +344,7 @@ class CaneEditor():
         site_id = self.model.site("probe_contact_site").id
         new_site_xpos = data.site_xpos[site_id]
         
-        init_probe_x = new_site_xpos[0] - 0.056 - contact_branch_radius # offset to the left of the site
+        init_probe_x = new_site_xpos[0] - 0.056 - self.probe_contact_branch_radius # offset to the left of the site
         for body in self.spec.bodies: 
             if body.name == "probe_link":
                 body.pos = [init_probe_x, new_site_xpos[1], probe_height]

@@ -1,3 +1,5 @@
+# format from https://matplotlib.org/3.10.9/gallery/lines_bars_and_markers/barchart.html
+
 import matplotlib.pyplot as plt
 import numpy as np
 
