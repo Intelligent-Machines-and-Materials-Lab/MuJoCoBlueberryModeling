@@ -272,7 +272,8 @@ class CaneEditor():
         Adds a new site at the probe height along the branch body after that site."""
         # raise a value error if probe height is above the total length of the branch
         if probe_height > self.total_length:
-            raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
+            print(f"Probe height {probe_height:.3f} m is above total length of branch {self.total_length:.3f} m. Check heights.")
+            # raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
 
         # set up the model to and data to be bent (probably)
         self.model = self.spec.compile()
