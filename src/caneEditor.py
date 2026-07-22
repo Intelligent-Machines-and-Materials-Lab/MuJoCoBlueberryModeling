@@ -12,6 +12,7 @@ build_branch
 import mujoco
 import numpy as np
 import mediapy as media
+import matplotlib.pyplot as plt
 import pygments
 print_style = 'lovelace'
 from IPython.display import HTML, display
@@ -372,6 +373,24 @@ class CaneEditor():
             # cam = renderer.scene.camera[0]
             # print(f"Default camera position: {cam.pos}")
             media.show_image(renderer.render())
+
+    def show_model_at_pos_script(self, pos):
+        """
+        Displays the model at the given position using matplotlib.
+        Use this instead of show_model_at_pos() when running in a normal Python script.
+        """
+        data = mujoco.MjData(self.model)
+        data.qpos[:] = pos
+        with mujoco.Renderer(self.model, height=480, width=640) as renderer:
+            mujoco.mj_forward(self.model, data)
+            renderer.update_scene(data)
+            img = renderer.render()
+        plt.close('all')
+        fig, ax = plt.subplots()
+        ax.imshow(img)
+        ax.axis('off')
+        fig.tight_layout()
+        plt.show()
 
     def save_picture_of_model(self, pos, filename):
         """
