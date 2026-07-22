@@ -275,6 +275,13 @@ class CaneEditor():
             print(f"Probe height {probe_height:.3f} m is above total length of branch {self.total_length:.3f} m. Check heights.")
             # raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
 
+        # Remove existing probe_contact_site if it already exists
+        for body in self.spec.bodies:
+            for site in body.find_all("site"):
+                if site.name == "probe_contact_site":
+                    site.delete()
+                    break
+
         # set up the model to and data to be bent (probably)
         self.model = self.spec.compile()
         data = mujoco.MjData(self.model)
@@ -312,6 +319,7 @@ class CaneEditor():
         hyp1 = z_remainder / np.cos(euler[0])
         hyp2 = hyp1 / np.cos(euler[1])
         print(f"distance along branch to probe site: {hyp2:.3f} m")
+
         for body in self.spec.bodies:
             if body.name == body_name:
                 geoms = body.find_all("geom")
