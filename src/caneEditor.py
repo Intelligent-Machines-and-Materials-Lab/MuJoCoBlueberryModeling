@@ -306,6 +306,10 @@ class CaneEditor():
         site_xpos = data.site_xpos[last_site_i]
         rotmat = data.xmat[body_id].reshape(3, 3)
         euler = R.from_matrix(rotmat).as_euler('xyz', degrees=False)
+        branch_axis_world = rotmat[:,2]  # z-axis of the body frame in world coordinates
+        angle_from_yz_plane = np.arcsin(branch_axis_world[0])  # angle from the yz-plane (x=0 plane)
+        self.init_probe_angle = angle_from_yz_plane
+        print(f"probed branch is at angle {np.degrees(angle_from_yz_plane):.2f} degrees from vertical plane (yz-plane)")
 
         if verbose:
             print("Last site before probe height:")

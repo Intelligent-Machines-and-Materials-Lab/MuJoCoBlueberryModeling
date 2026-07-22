@@ -220,8 +220,10 @@ class TrialSim():
 
                 # -- apply force at probe contact site --
                 data.qfrc_applied[:] = 0
+                force_x = force*np.cos(self.Branch.editor.init_probe_angle)
+                force_z = -force*np.sin(self.Branch.editor.init_probe_angle)
                 mujoco.mj_applyFT(model, data,
-                                np.array([force*np.cos(self.force_angle), 0.0, force*np.sin(self.force_angle)]),  # force [N]
+                                np.array([force_x, 0.0, force_z]),  # force [N]
                                 np.zeros(3),                     # torque
                                 data.site_xpos[probe_site_id],  # point of application (world frame)
                                 probe_body_id,
@@ -246,6 +248,7 @@ class TrialSim():
                     pre_control_probeposes.append(current_disp_m)
                     last_force = force
                     print(f"Time: {data.time:.3f}s, Current Displacement: {current_disp_m*1000:.3f} mm, Force Applied: {force:.3f} N")
+                    print(f"Probe angle: {np.degrees(self.Branch.editor.init_probe_angle):.2f}; Force components: x={force_x:.3f} N, z={force_z:.3f} N")
                     pid.setpoint += 0.0005  # increment by 0.5 mm (0.0005 m)
 
         self.full_results = {
