@@ -177,7 +177,7 @@ def get_angles_between_segments(segments):
 
     return angles
 
-def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True):
+def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8):
     # load txt file
     curve_df = pd.read_csv(filepath, delimiter=' ', header=None)
     curve = curve_df.to_numpy()
@@ -196,7 +196,7 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
     # iterate until MSE is below 5mm or we have 12 segments
     i = 1
     # RMSE > 5
-    while len(segs) < 13:
+    while len(segs) < num_segs + 1:
         random_points = np.random.randint(0, curve.shape[0], 20)
         random_curve = curve[random_points]
         random_dists = get_distances_between_curve_and_segments(random_curve, segs)
