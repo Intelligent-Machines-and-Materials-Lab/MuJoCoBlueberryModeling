@@ -34,6 +34,9 @@ from simple_pid import PID
 import splineconverter
 from caneEditor import CaneEditor
 
+from SALib.sample.morris import sample as morris_sample
+
+
 def flip_segs_from_curve(segs, print_output=False):
     # Switch coordinate frames from spline (camera) to MuJoCo and center at origin
     trans_segs = np.zeros_like(segs)
@@ -56,9 +59,10 @@ def get_midpoints(segs, print_output=False):
     return midpoint_zs
 
 class TrialSim():
-    def __init__(self, BranchSim, TRIAL_NUM):
+    def __init__(self, BranchSim, TRIAL_NUM, force_angle=0):
         self.Branch = BranchSim
         self.TRIAL_NUM = TRIAL_NUM
+        self.force_angle = force_angle
         self.metadata = {
             'sim_idx': [],
             'bush': [],
@@ -88,17 +92,31 @@ class TrialSim():
         print(f"Loaded push data from {filename} with {self.TRIAL_LENGTH} rows.")
 
         self.run_trial()
+        # self.plot_probe_steps()
 
-    def plot_probe_steps(probevals, timevals, BUSH_NUM, BRANCH_NUM, TRIAL_NUM):
+        # Get linear fits for push data and simulation data
+        self.fd_linearfit = np.polyfit(self.pushdata['actuator_displacement'], self.pushdata['Load (N)'], 1)
+        self.sim_fd_linearfit = np.polyfit(self.discrete_results['Probe (mm)'].values, self.discrete_results['Force (N)'].values, 1)
+        print(f"Effective stiffness from sim data: {self.sim_fd_linearfit[0]:.3f} N/mm")
+        
+        self.stiffness_error = self.get_stiffness_percentage_error()
+        print(f"Stiffness percentage error: {self.stiffness_error*100:.2f}%")
+
+        self.plot_force_displacement_comparison()
+
+    def plot_probe_steps(self):
         dpi=120 
         width=1200 
         height=400
         figsize=(width/dpi, height/dpi)
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
+        _, ax = plt.subplots(figsize=figsize, dpi=dpi)
+
+        probevals = self.full_results['probevals']
+        timevals = self.full_results['timevals']
 
         probearray = np.array(probevals)*1000  # convert from m to mm for easier comparison to push data
         ax.plot(timevals, probearray, label='Simulation Probe Displacement', color='blue')
-        ax.set_title(f'Bush {BUSH_NUM}, Branch {BRANCH_NUM}, Trial {TRIAL_NUM}')
+        ax.set_title(f'Bush {self.Branch.BUSH_NUM}, Branch {self.Branch.BRANCH_NUM}, Trial {self.TRIAL_NUM}')
         ax.set_xlabel('Time (s)')
         ax.set_ylabel('Probe Displacement (mm)')
 
@@ -115,8 +133,12 @@ class TrialSim():
         ax.step(timevals, step_ref, where='post', linestyle='--', color='black', label='0.001 step every 1s')
         # ax.legend()
         ax.grid(True)
+        plt.show()
     
-    def calculate_absolute_errors(pre_control_forcevals_array, pre_control_probeposes_array, pushdata, metadata):
+    def calculate_absolute_errors(self, pushdata, metadata):
+        pre_control_forcevals_array = self.discrete_results['Force (N)'].values
+        pre_control_probeposes_array = self.discrete_results['Probe (mm)'].values
+        
         # I'm lame and bad at code so this is how we're doing this
         try:
             sim_force_10mm = pre_control_forcevals_array[np.where(pre_control_probeposes_array >= 10)[0]]
@@ -194,12 +216,12 @@ class TrialSim():
                 current_disp_m = data.site_xpos[probe_site_id][0] - probe_init_xpos[0]
 
                 # -- PID: drive current displacement toward target --
-                force_x = last_force + pid(current_disp_m)
+                force = last_force + pid(current_disp_m)
 
                 # -- apply force at probe contact site --
                 data.qfrc_applied[:] = 0
                 mujoco.mj_applyFT(model, data,
-                                np.array([force_x, 0.0, 0.0]),  # force [N]
+                                np.array([force*np.cos(self.force_angle), 0.0, force*np.sin(self.force_angle)]),  # force [N]
                                 np.zeros(3),                     # torque
                                 data.site_xpos[probe_site_id],  # point of application (world frame)
                                 probe_body_id,
@@ -214,30 +236,71 @@ class TrialSim():
                 # -- save data from sim  -- 
                 if len(timevals) < data.time * DATACAP_RATE:
                     timevals.append(data.time)
-                    forcevals.append(force_x)
+                    forcevals.append(force)
                     probevals.append(current_disp_m)
                 
                 # update the control position at the specified rate
                 if int(data.time * CTRL_POS_UPDATE_RATE) > int((data.time - model.opt.timestep) * CTRL_POS_UPDATE_RATE):
                     pre_control_timevals.append(data.time)
-                    pre_control_forcevals.append(force_x)
+                    pre_control_forcevals.append(force)
                     pre_control_probeposes.append(current_disp_m)
-                    last_force = force_x
-                    print(f"Time: {data.time:.3f}s, Current Displacement: {current_disp_m*1000:.3f} mm, Force Applied: {force_x:.3f} N")
+                    last_force = force
+                    print(f"Time: {data.time:.3f}s, Current Displacement: {current_disp_m*1000:.3f} mm, Force Applied: {force:.3f} N")
                     pid.setpoint += 0.0005  # increment by 0.5 mm (0.0005 m)
 
+        self.full_results = {
+            'timevals': np.array(timevals),
+            'forcevals': np.array(forcevals),
+            'probevals': np.array(probevals)
+        }
+        self.discrete_results = pd.DataFrame({
+            'Time (s)': np.array(pre_control_timevals),
+            'Force (N)': np.array(pre_control_forcevals),
+            'Probe (mm)': np.array(pre_control_probeposes)*1000
+        })
+
+    def pickle_sim_data(self):
+        pickle_filename = results_folder + '/sim_data_df_bush' + str(self.Branch.BUSH_NUM) + '_branch'+ str(self.Branch.BRANCH_NUM) + '_trial' + str(self.TRIAL_NUM) + '.pkl'
+        with open(pickle_filename, 'wb') as f:
+            pickle.dump(self.discrete_results, f)
+
+    def get_real_force_at_disp(self, disp_in_mm):
+        force = self.fd_linearfit[0]*disp_in_mm + self.fd_linearfit[1]
+        return force
+    
+    def get_sim_force_at_disp(self, disp_in_mm):
+        force = self.sim_fd_linearfit[0]*disp_in_mm + self.sim_fd_linearfit[1]
+        return force
+    
+    def plot_force_displacement_comparison(self):
+        fig = plt.figure()
+        plt.plot(self.pushdata['actuator_displacement'], self.pushdata['Load (N)'], label='Measured Data', color='#377eb8')
+        plt.plot(self.pushdata['actuator_displacement'], self.get_real_force_at_disp(self.pushdata['actuator_displacement']), label='Linear Fit', linestyle='--', color='#ff7f00')
+        plt.plot(self.discrete_results['Probe (mm)'].values, self.discrete_results['Force (N)'].values, label='Simulator probe', linestyle='-', color='#4daf4a')
+        plt.plot(self.discrete_results['Probe (mm)'].values, self.get_sim_force_at_disp(self.discrete_results['Probe (mm)'].values), label='Simulator Linear Fit', linestyle='--', color='#f781bf')
+        plt.xlabel("Displacement (mm)")
+        plt.ylabel("Load (N)")
+        plt.legend()
+        plt.grid()
+        plt.show()
+
+    def get_stiffness_percentage_error(self):
+        real_stiffness = self.fd_linearfit[0]
+        sim_stiffness = self.sim_fd_linearfit[0]
+        error = abs(sim_stiffness - real_stiffness) / real_stiffness
+        return error # between 0 and 1, where 0 is perfect match and 1 is 100% error
 
 class BranchSim():
-    def __init__(self, BUSH_NUM, BRANCH_NUM):
+    def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.9e9, num_segs=8):
         self.BUSH_NUM = BUSH_NUM
         self.BRANCH_NUM = BRANCH_NUM
 
         # Handle the one exceeption where the branch bends back on itself 
         if self.BUSH_NUM == 9 and self.BRANCH_NUM == 2:
-            segs_mm, RMSE = self.deal_with_branch_9_2()
+            segs_mm, RMSE = self.deal_with_branch_9_2(num_segs)
         else: 
             segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(DATA_DIR, 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'), 
-                                                    make_plot=True, strictly_increasing=True)
+                                                    make_plot=True, strictly_increasing=True, num_segs=num_segs)
         
         segs = np.array(segs_mm)/1000
         # Correctly orient the segments for MuJoCo (they're upside down from the camera)
@@ -258,14 +321,16 @@ class BranchSim():
         self.radii = self.get_rad_at_height(midpoint_zs)
         print("Radii at segment midpoints (m): ", self.radii)
 
-        self.build_mjcf_model(flex_modulus=4.9e9)
+        self.build_mjcf_model(flex_modulus=flex_mod)
+
+        self.editor.show_model_at_pos_script(self.zero_pos)
         
-    def deal_with_branch_9_2(self):
+    def deal_with_branch_9_2(self, num_segs):
         angles_validated = False
         attempt = 1
         while not angles_validated:
             segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(DATA_DIR, 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'),
-                                                make_plot=True, strictly_increasing=False)
+                                                make_plot=True, strictly_increasing=False, num_segs=num_segs)
             segs_flipped = flip_segs_from_curve(segs_mm, print_output=False)
             seg_angles = splineconverter.get_angles_between_segments(segs_flipped) 
             if abs(max(seg_angles.min(), seg_angles.max(), key=abs))<np.pi/2:
@@ -318,16 +383,33 @@ if __name__ == "__main__":
     diamdata = pd.read_csv(os.path.join(DATA_DIR, 'diameters/offset_branch_diameter_data.csv'))
     diameter_data_df = pd.DataFrame(diamdata)
 
+    # morris placeholders
+    test_mod = 4.9e9
+    num_segs = 5
+    probe_angle = np.pi/8
+
+    problem = {
+        'num_vars': 3,
+        'names': ['flex_modulus', 'num_segments', 'probe_angle'],
+        'bounds': [[1.68e9, 7.31e9], 
+                   [1, 12], 
+                   [-np.pi/6, np.pi/6]]}
+    # samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
+
+    # Have two outputs: 
+    # the raw simulation stiffness (how much do the parameters affect the raw output)
+    # the MAPE (how much do the parameters affect the error)
+
     for BUSH_NUM in [1, 3, 5, 9, 14, 23]:
         print ("----------------------------------------")
         print ("Starting bush number: ", BUSH_NUM)
         print ("----------------------------------------")
+
         for BRANCH_NUM in [1, 2, 3]:
             print ("----------------------------------------")
             print ("Starting bush :", BUSH_NUM, " branch: ", BRANCH_NUM)
             print ("----------------------------------------")
-            Branch = BranchSim(BUSH_NUM=BUSH_NUM, BRANCH_NUM=BRANCH_NUM)
-    
+            
             for TRIAL_NUM in [1, 2, 3]:
                 # Check to see if it's one of the exceptions we're skipping.. 
                 if BUSH_NUM ==14:
@@ -338,4 +420,19 @@ if __name__ == "__main__":
                         print("Excluding trial 14/3/1 because camera data did not capture push point")
                         continue
                 
-                Trial = TrialSim(Branch, TRIAL_NUM)
+                # samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
+                # output_stiffnesses = np.zeros(samples.shape[0])
+                # output_errors = np.zeros(samples.shape[0])
+                # for i, x in enumerate(samples):
+                #     test_mod = x[0]
+                #     num_segs = int(x[1])
+                #     probe_angle = x[2]
+                #     print ("----------------------------------------")
+                #     print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad")
+                #     print ("----------------------------------------")
+                        
+                Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs)
+                Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle)
+                # output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
+                # output_errors[i] = Trial.stiffness_error
+
