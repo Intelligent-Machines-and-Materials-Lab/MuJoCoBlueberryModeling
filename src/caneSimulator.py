@@ -325,7 +325,7 @@ class BranchSim():
 
         self.build_mjcf_model(flex_modulus=flex_mod)
 
-        # self.editor.show_model_at_pos_script(self.zero_pos)
+        self.editor.show_model_at_pos_script(self.zero_pos)
 
     def create_linearfit_from_diam_data(self):
         # get the diameter data for this bush and branch
@@ -364,9 +364,10 @@ class BranchSim():
             branch_xml = f.read()
 
         self.editor = CaneEditor(branch_xml, flex_mod=flex_modulus)
-        self.editor.build_branch_from_lengths(self.seg_lengths, self.radii, verbose=False)
-        self.editor.offset_all_joints_in_direction('x', self.seg_angles[:,0])
-        self.editor.offset_all_joints_in_direction('y', self.seg_angles[:,1])
+        self.editor.build_branch_from_lengths(self.seg_lengths, self.radii,
+                                               angles_x=self.seg_angles[:,0],
+                                               angles_y=self.seg_angles[:,1],
+                                               verbose=False)
         self.zero_pos = self.editor.get_zero_springref_pos()
         self.editor.total_length = self.segs_flipped[-1][2]
 
@@ -442,65 +443,65 @@ if __name__ == "__main__":
                         print("Excluding trial 14/3/1 because camera data did not capture push point")
                         continue
                 
-                samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
-                output_stiffnesses = np.zeros(samples.shape[0])
-                output_errors = np.zeros(samples.shape[0])
-                for i, x in enumerate(samples):
-                    test_mod = x[0]
-                    num_segs = int(x[1])
-                    probe_angle = x[2]
-                    diam_func_factor = x[3]
-                    print ("----------------------------------------")
-                    print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad, diam_func_factor: {diam_func_factor:.3f}")
-                    print ("----------------------------------------")
+                # samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
+                # output_stiffnesses = np.zeros(samples.shape[0])
+                # output_errors = np.zeros(samples.shape[0])
+                # for i, x in enumerate(samples):
+                #     test_mod = x[0]
+                #     num_segs = int(x[1])
+                #     probe_angle = x[2]
+                #     diam_func_factor = x[3]
+                #     print ("----------------------------------------")
+                #     print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad, diam_func_factor: {diam_func_factor:.3f}")
+                #     print ("----------------------------------------")
                         
-                    try:
-                        Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=diam_func_factor)
-                        Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle)
-                        output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
-                        output_errors[i] = Trial.stiffness_error
-                    except Exception as e:
-                        print(f"Sample {i} failed: {e}. Will fill with mean after loop.")
-                        output_stiffnesses[i] = np.nan
-                        output_errors[i] = np.nan
+                #     try:
+                Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=diam_func_factor)
+                Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle)
+                #         output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
+                #         output_errors[i] = Trial.stiffness_error
+                #     except Exception as e:
+                #         print(f"Sample {i} failed: {e}. Will fill with mean after loop.")
+                #         output_stiffnesses[i] = np.nan
+                #         output_errors[i] = np.nan
 
-                # Replace failed samples with the mean of successful ones
-                output_stiffnesses = np.where(np.isnan(output_stiffnesses), np.nanmean(output_stiffnesses), output_stiffnesses)
-                output_errors = np.where(np.isnan(output_errors), np.nanmean(output_errors), output_errors)
+                # # Replace failed samples with the mean of successful ones
+                # output_stiffnesses = np.where(np.isnan(output_stiffnesses), np.nanmean(output_stiffnesses), output_stiffnesses)
+                # output_errors = np.where(np.isnan(output_errors), np.nanmean(output_errors), output_errors)
 
-                Si = morris_analyze(problem, samples, output_stiffnesses, scaled=True, print_to_console=True)
-                Stiffness_Sis.append(Si)
+                # Si = morris_analyze(problem, samples, output_stiffnesses, scaled=True, print_to_console=True)
+                # Stiffness_Sis.append(Si)
 
-                Ei = morris_analyze(problem, samples, output_errors, print_to_console=True)
-                Error_Sis.append(Ei)
+                # Ei = morris_analyze(problem, samples, output_errors, print_to_console=True)
+                # Error_Sis.append(Ei)
 
     # make a scatterplot with mu star on the x axis and sigma on the y axis for each parameter, for both stiffness and error
     # each parameter should be a different color. The stiffness and error will be on different plots. 
-    plt.close('all')
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    colors = [cm.batlow(x) for x in np.linspace(0, 1, len(problem['names']))]
-    for i, name in enumerate(problem['names']):
-        for j in range(len(Stiffness_Sis)):
-            ax[0].scatter(Stiffness_Sis[j]['mu_star'][i], Stiffness_Sis[j]['sigma'][i],
-                        color=colors[i], label=name if j == 0 else None)
-            ax[1].scatter(Error_Sis[j]['mu_star'][i], Error_Sis[j]['sigma'][i],
-                        color=colors[i], label=name if j == 0 else None)
-    ax[0].set_title('Stiffness Sensitivity')
-    ax[0].set_xlabel('Mu Star')
-    ax[0].set_ylabel('Sigma')
-    ax[1].set_title('Error Sensitivity')
-    ax[1].set_xlabel('Mu Star')
-    ax[1].set_ylabel('Sigma')
-    handles, labels = ax[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc='center left', bbox_to_anchor=(1.01, 0.5))
-    fig.tight_layout(rect=[0, 0, 0.82, 1])  # leave room on the right for the legend
-    plt.show()
+    # plt.close('all')
+    # fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    # colors = [cm.batlow(x) for x in np.linspace(0, 1, len(problem['names']))]
+    # for i, name in enumerate(problem['names']):
+    #     for j in range(len(Stiffness_Sis)):
+    #         ax[0].scatter(Stiffness_Sis[j]['mu_star'][i], Stiffness_Sis[j]['sigma'][i],
+    #                     color=colors[i], label=name if j == 0 else None)
+    #         ax[1].scatter(Error_Sis[j]['mu_star'][i], Error_Sis[j]['sigma'][i],
+    #                     color=colors[i], label=name if j == 0 else None)
+    # ax[0].set_title('Stiffness Sensitivity')
+    # ax[0].set_xlabel('Mu Star')
+    # ax[0].set_ylabel('Sigma')
+    # ax[1].set_title('Error Sensitivity')
+    # ax[1].set_xlabel('Mu Star')
+    # ax[1].set_ylabel('Sigma')
+    # handles, labels = ax[0].get_legend_handles_labels()
+    # fig.legend(handles, labels, loc='center left', bbox_to_anchor=(1.01, 0.5))
+    # fig.tight_layout(rect=[0, 0, 0.82, 1])  # leave room on the right for the legend
+    # plt.show()
 
-    # pickle Stiffness_Sis and Error_Sis to results folder
-    with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
-        pickle.dump(Stiffness_Sis, f)
-    with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
-        pickle.dump(Error_Sis, f)
-    # save the plot to the results folder
-    fig.savefig(os.path.join(results_folder, 'sensitivity_analysis.png'))
+    # # pickle Stiffness_Sis and Error_Sis to results folder
+    # with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
+    #     pickle.dump(Stiffness_Sis, f)
+    # with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
+    #     pickle.dump(Error_Sis, f)
+    # # save the plot to the results folder
+    # fig.savefig(os.path.join(results_folder, 'sensitivity_analysis.png'))
 

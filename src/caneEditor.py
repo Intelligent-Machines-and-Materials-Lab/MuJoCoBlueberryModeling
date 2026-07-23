@@ -44,12 +44,14 @@ class CaneEditor():
         self.spec.default.site.size = np.array([0.01, 0.01, 0.01])
         self.spec.default.site.rgba = np.array([0, 0, 0, 1])
 
-    def build_branch_from_lengths(self, lengths, radii, def_stiff=295, verbose=False):
+    def build_branch_from_lengths(self, lengths, radii, angles_x=None, angles_y=None, def_stiff=295, verbose=False):
         """
         Procedurally builds the MJDF with the specified segment lengths and radii. Assumes no branching. 
         Calculates bending stiffnes based on beam bending theory and sets the joint stiffness accordingly.
         lengths: list of segment length in meters
         radii: list of segment radius in meters (assumes circular cross-section)
+        angles_x: list of x-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
+        angles_y: list of y-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
         """
         self.num_segments = len(lengths)
         self.spec.default.joint.stiffness = def_stiff
@@ -84,19 +86,19 @@ class CaneEditor():
             rgba[3] = 1
             brown_variant = (rgba + BROWN*2) / 3
 
+            # Bake bend angles into body frame so qpos=0 is the natural shape (no springref torque at rest)
+            euler_x_deg = np.degrees(angles_x[i]) if angles_x is not None else 0.0
+            euler_y_deg = np.degrees(angles_y[i]) if angles_y is not None else 0.0
+
             # add child body to parent
             if parent_body == base_body:
                 # start the first segment at the base
-                child_body = parent_body.add_body(name=body_name, 
-                                              pos=[0,0,0])
-                # print(f"Adding body: {child_body.name} at position: {child_body.pos}")
+                child_body = parent_body.add_body(name=body_name, pos=[0,0,0])
             else:
                 # start the subsequent segments at the end of the previous segment
-                child_body = parent_body.add_body(name=body_name, 
-                                                  pos=[0,0,lengths[i-1]])
-                # print(f"Adding body: {child_body.name} at position: {child_body.pos}")
-            # print(f"Adding body: {child_body.name} at position: {child_body.pos}")
-            # add hinge to child body
+                child_body = parent_body.add_body(name=body_name, pos=[0,0,lengths[i-1]])
+            xyzw = R.from_euler('xyz', [euler_x_deg, euler_y_deg, 0.0], degrees=True).as_quat()
+            child_body.quat = [xyzw[3], xyzw[0], xyzw[1], xyzw[2]]  # MuJoCo uses [w, x, y, z]
             second_moment_area = (np.pi/4) * (radii[i]**4)
             k = 3*self.E*second_moment_area / seg_length
             self.inverted_k_list.append(1/k)
