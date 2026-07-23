@@ -194,7 +194,7 @@ class CaneEditor():
             I = self.model.body_inertia[3*b:3*b+3]
             print(f"  body {b} ({self.model.body(b).name}): {I}")
 
-    def offset_joint_by_name(self, joint_name, angle):
+    def offset_joint_by_name(self, joint_name, angle, compile=True):
         """
         Offsets the joint angle of a specified joint by a given angle.
         Note: this also sets the reference position for the angle. 
@@ -208,8 +208,8 @@ class CaneEditor():
                 break
         if not found:
             raise ValueError(f"Joint '{joint_name}' not found.")
-        # compile the model again to apply changes
-        self.model = self.spec.compile()
+        if compile:
+            self.model = self.spec.compile()
 
     def offset_joint_by_dir_and_number(self, joint_dir, joint_number, angle):
         """
@@ -227,7 +227,7 @@ class CaneEditor():
         joint_name = f"branch_joint_{joint_dir}{joint_number}"
         self.offset_joint_by_name(joint_name, angle)
 
-    def offset_all_joints_in_direction(self,  direction, angles):
+    def offset_all_joints_in_direction(self, direction, angles):
         """
         Offsets all joints by the specified angles.
         angles: list of angles to offset each joint
@@ -237,8 +237,8 @@ class CaneEditor():
         if self.num_segments == len(angles):
             for i, angle in enumerate(angles):
                 joint_name = f"branch_joint_{direction}{i}"
-                self.offset_joint_by_name(joint_name, angle)
-            
+                self.offset_joint_by_name(joint_name, angle, compile=False)
+            # Compile once after all springrefs are set
             self.model = self.spec.compile()
         else:
             raise ValueError("Number of angles must match the number of x joints.")

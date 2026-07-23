@@ -31,10 +31,12 @@ import datetime
 import matplotlib.pyplot as plt
 from IPython.display import clear_output 
 from simple_pid import PID
+import cmcrameri.cm as cm
 import splineconverter
 from caneEditor import CaneEditor
 
 from SALib.sample.morris import sample as morris_sample
+from SALib.analyze.morris import analyze as morris_analyze
 
 
 def flip_segs_from_curve(segs, print_output=False):
@@ -102,7 +104,7 @@ class TrialSim():
         self.stiffness_error = self.get_stiffness_percentage_error()
         print(f"Stiffness percentage error: {self.stiffness_error*100:.2f}%")
 
-        self.plot_force_displacement_comparison()
+        # self.plot_force_displacement_comparison()
 
     def plot_probe_steps(self):
         dpi=120 
@@ -183,7 +185,7 @@ class TrialSim():
         model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON 
         model.opt.tolerance = 1e-8
 
-        DURATION = 1 # TRIAL_LENGTH
+        DURATION = 2 # TRIAL_LENGTH
         DATACAP_RATE = 20 # Hz
         init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
 
@@ -291,7 +293,7 @@ class TrialSim():
         real_stiffness = self.fd_linearfit[0]
         sim_stiffness = self.sim_fd_linearfit[0]
         error = abs(sim_stiffness - real_stiffness) / real_stiffness
-        return error # between 0 and 1, where 0 is perfect match and 1 is 100% error
+        return error 
 
 class BranchSim():
     def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.9e9, num_segs=8, diam_func_factor=1):
@@ -323,7 +325,7 @@ class BranchSim():
 
         self.build_mjcf_model(flex_modulus=flex_mod)
 
-        self.editor.show_model_at_pos_script(self.zero_pos)
+        # self.editor.show_model_at_pos_script(self.zero_pos)
 
     def create_linearfit_from_diam_data(self):
         # get the diameter data for this bush and branch
@@ -373,6 +375,7 @@ class BranchSim():
         self.editor.save_picture_of_model(self.zero_pos, filename)
 
 if __name__ == "__main__":
+    plt.close('all')
     clear_output()
     np.set_printoptions(precision=3, suppress=True, linewidth=100)
 
@@ -398,30 +401,38 @@ if __name__ == "__main__":
     test_mod = 4.9e9
     num_segs = 5
     probe_angle = 0
+    diam_func_factor = 1
 
     problem = {
-        'num_vars': 3,
-        'names': ['flex_modulus', 'num_segments', 'probe_angle'],
+        'num_vars': 4,
+        'names': ['flex_modulus', 'num_segments', 'probe_angle', 'diam_func_factor'],
         'bounds': [[1.68e9, 7.31e9], 
-                   [1, 12], 
-                   [-np.pi/6, np.pi/6]]}
+                   [4, 12], 
+                   [-np.pi/6, np.pi/6],
+                   [0, 1.2]]}
     # samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
 
     # Have two outputs: 
     # the raw simulation stiffness (how much do the parameters affect the raw output)
     # the MAPE (how much do the parameters affect the error)
 
+    Stiffness_Sis = []
+    Error_Sis = []
+
     for BUSH_NUM in [1, 3, 5, 9, 14, 23]:
+    # for BUSH_NUM in [1]:
         print ("----------------------------------------")
         print ("Starting bush number: ", BUSH_NUM)
         print ("----------------------------------------")
 
         for BRANCH_NUM in [1, 2, 3]:
+        # for BRANCH_NUM in [1]:
             print ("----------------------------------------")
             print ("Starting bush :", BUSH_NUM, " branch: ", BRANCH_NUM)
             print ("----------------------------------------")
             
             for TRIAL_NUM in [1, 2, 3]:
+            # for TRIAL_NUM in [1,2]:
                 # Check to see if it's one of the exceptions we're skipping.. 
                 if BUSH_NUM ==14:
                     if BRANCH_NUM == 2 and TRIAL_NUM == 3:
@@ -431,19 +442,65 @@ if __name__ == "__main__":
                         print("Excluding trial 14/3/1 because camera data did not capture push point")
                         continue
                 
-                # samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
-                # output_stiffnesses = np.zeros(samples.shape[0])
-                # output_errors = np.zeros(samples.shape[0])
-                # for i, x in enumerate(samples):
-                #     test_mod = x[0]
-                #     num_segs = int(x[1])
-                #     probe_angle = x[2]
-                #     print ("----------------------------------------")
-                #     print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad")
-                #     print ("----------------------------------------")
+                samples = morris_sample(problem, N=500, num_levels=4, optimal_trajectories=2)
+                output_stiffnesses = np.zeros(samples.shape[0])
+                output_errors = np.zeros(samples.shape[0])
+                for i, x in enumerate(samples):
+                    test_mod = x[0]
+                    num_segs = int(x[1])
+                    probe_angle = x[2]
+                    diam_func_factor = x[3]
+                    print ("----------------------------------------")
+                    print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad, diam_func_factor: {diam_func_factor:.3f}")
+                    print ("----------------------------------------")
                         
-                Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=.5)
-                Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle)
-                # output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
-                # output_errors[i] = Trial.stiffness_error
+                    try:
+                        Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=diam_func_factor)
+                        Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle)
+                        output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
+                        output_errors[i] = Trial.stiffness_error
+                    except Exception as e:
+                        print(f"Sample {i} failed: {e}. Will fill with mean after loop.")
+                        output_stiffnesses[i] = np.nan
+                        output_errors[i] = np.nan
+
+                # Replace failed samples with the mean of successful ones
+                output_stiffnesses = np.where(np.isnan(output_stiffnesses), np.nanmean(output_stiffnesses), output_stiffnesses)
+                output_errors = np.where(np.isnan(output_errors), np.nanmean(output_errors), output_errors)
+
+                Si = morris_analyze(problem, samples, output_stiffnesses, scaled=True, print_to_console=True)
+                Stiffness_Sis.append(Si)
+
+                Ei = morris_analyze(problem, samples, output_errors, print_to_console=True)
+                Error_Sis.append(Ei)
+
+    # make a scatterplot with mu star on the x axis and sigma on the y axis for each parameter, for both stiffness and error
+    # each parameter should be a different color. The stiffness and error will be on different plots. 
+    plt.close('all')
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    colors = [cm.batlow(x) for x in np.linspace(0, 1, len(problem['names']))]
+    for i, name in enumerate(problem['names']):
+        for j in range(len(Stiffness_Sis)):
+            ax[0].scatter(Stiffness_Sis[j]['mu_star'][i], Stiffness_Sis[j]['sigma'][i],
+                        color=colors[i], label=name if j == 0 else None)
+            ax[1].scatter(Error_Sis[j]['mu_star'][i], Error_Sis[j]['sigma'][i],
+                        color=colors[i], label=name if j == 0 else None)
+    ax[0].set_title('Stiffness Sensitivity')
+    ax[0].set_xlabel('Mu Star')
+    ax[0].set_ylabel('Sigma')
+    ax[1].set_title('Error Sensitivity')
+    ax[1].set_xlabel('Mu Star')
+    ax[1].set_ylabel('Sigma')
+    handles, labels = ax[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc='center left', bbox_to_anchor=(1.01, 0.5))
+    fig.tight_layout(rect=[0, 0, 0.82, 1])  # leave room on the right for the legend
+    plt.show()
+
+    # pickle Stiffness_Sis and Error_Sis to results folder
+    with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
+        pickle.dump(Stiffness_Sis, f)
+    with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
+        pickle.dump(Error_Sis, f)
+    # save the plot to the results folder
+    fig.savefig(os.path.join(results_folder, 'sensitivity_analysis.png'))
 
