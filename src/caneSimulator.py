@@ -220,8 +220,8 @@ class TrialSim():
 
                 # -- apply force at probe contact site --
                 data.qfrc_applied[:] = 0
-                force_x = force*np.cos(self.Branch.editor.init_probe_angle)
-                force_z = -force*np.sin(self.Branch.editor.init_probe_angle)
+                force_x = force*np.cos(self.Branch.editor.init_probe_angle + self.force_angle)
+                force_z = -force*np.sin(self.Branch.editor.init_probe_angle + self.force_angle)
                 mujoco.mj_applyFT(model, data,
                                 np.array([force_x, 0.0, force_z]),  # force [N]
                                 np.zeros(3),                     # torque
@@ -294,7 +294,7 @@ class TrialSim():
         return error # between 0 and 1, where 0 is perfect match and 1 is 100% error
 
 class BranchSim():
-    def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.9e9, num_segs=8):
+    def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.9e9, num_segs=8, diam_func_factor=1):
         self.BUSH_NUM = BUSH_NUM
         self.BRANCH_NUM = BRANCH_NUM
 
@@ -315,19 +315,27 @@ class BranchSim():
         self.seg_lengths = splineconverter.get_segment_lengths(self.segs_flipped)
         self.seg_angles = splineconverter.get_angles_between_segments(self.segs_flipped)
 
-        # get the diameter data for this particular cane and generate a linear fit
-        self.field_measurements = diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
-        print(self.field_measurements)
-        self.diam_linearfit = np.polyfit(self.field_measurements['Height'], self.field_measurements['Diameter'], 1)
-        
+        slope, measured_centroid = self.create_linearfit_from_diam_data()
+
         # Get the radii at the segment midpoints 
-        self.radii = self.get_rad_at_height(midpoint_zs)
+        self.radii = self.get_rad_at_height(midpoint_zs, slope, measured_centroid, diam_func_factor=diam_func_factor)
         print("Radii at segment midpoints (m): ", self.radii)
 
         self.build_mjcf_model(flex_modulus=flex_mod)
 
         self.editor.show_model_at_pos_script(self.zero_pos)
-        
+
+    def create_linearfit_from_diam_data(self):
+        # get the diameter data for this bush and branch
+        self.field_measurements = diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
+        print(self.field_measurements)
+        # Get the center of the 3 measurements we actually took
+        centroid = (self.field_measurements['Height'].mean(), self.field_measurements['Diameter'].mean())
+        # Get a nice linear fit for those measurements
+        diam_linearfit = np.polyfit(self.field_measurements['Height'], self.field_measurements['Diameter'], 1)
+        # This is a linear fit that goes through the centroid but uses the slope from the linear fit
+        return diam_linearfit[0], centroid
+
     def deal_with_branch_9_2(self, num_segs):
         angles_validated = False
         attempt = 1
@@ -344,8 +352,8 @@ class BranchSim():
                 attempt += 1
         return segs_mm, RMSE
     
-    def get_rad_at_height(self, height_in_m):
-        diameter = self.diam_linearfit[0]*height_in_m*1000 + self.diam_linearfit[1]
+    def get_rad_at_height(self, height_in_m, slope, pt, diam_func_factor=1):
+        diameter = slope*diam_func_factor*(height_in_m*1000-pt[0]) + pt[1]
         return diameter/2/1000 # convert mm to m
     
     def build_mjcf_model(self, flex_modulus=4.9e9):        # read in the base XML for the branch model (this has the world and the probe, but not the segments of the branch yet)
@@ -389,7 +397,7 @@ if __name__ == "__main__":
     # morris placeholders
     test_mod = 4.9e9
     num_segs = 5
-    probe_angle = np.pi/8
+    probe_angle = 0
 
     problem = {
         'num_vars': 3,
@@ -434,7 +442,7 @@ if __name__ == "__main__":
                 #     print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad")
                 #     print ("----------------------------------------")
                         
-                Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs)
+                Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=.5)
                 Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle)
                 # output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
                 # output_errors[i] = Trial.stiffness_error
