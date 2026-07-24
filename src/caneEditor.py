@@ -299,7 +299,8 @@ class CaneEditor():
                 # print(f"Site {i} is below probe height: {site_xpos[2]} < {probe_height}")
                 last_site_i = i
 
-        print(f"Last site before probe height is {last_site_i} with position {data.site_xpos[last_site_i]}")
+        if verbose:
+            print(f"Last site before probe height is {last_site_i} with position {data.site_xpos[last_site_i]}")
 
         # get information about the last site
         name = self.model.site(last_site_i).name
@@ -325,7 +326,8 @@ class CaneEditor():
         z_remainder = probe_height - site_xpos[2]
         hyp1 = z_remainder / np.cos(euler[0])
         hyp2 = hyp1 / np.cos(euler[1])
-        print(f"distance along branch to probe site: {hyp2:.3f} m")
+        if verbose:
+            print(f"distance along branch to probe site: {hyp2:.3f} m")
 
         for body in self.spec.bodies:
             if body.name == body_name:

@@ -177,21 +177,23 @@ def get_angles_between_segments(segments):
 
     return angles
 
-def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8):
+def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8, verbose=False):
     # load txt file
     curve_df = pd.read_csv(filepath, delimiter=' ', header=None)
     curve = curve_df.to_numpy()
     
     #initialize segs as an ndarray of the first and last points of the obj_spline
     segs = np.array([curve[0,:], curve[-1,:]])
-    print(f"Initial segment endpoints:\n{segs}")
+    if verbose:
+        print(f"Initial segment endpoints:\n{segs}")
 
     # set up judgement curve as 20 evenly spaced points along the original curve, excluding the endpoints
     judgement_pts = np.linspace(0, curve.shape[0]-1, 22, dtype=int)[1:-2]
     judgement_curve = curve[judgement_pts]
 
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    print(f"RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
+    if verbose:
+        print(f"Initial RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
 
     # iterate until MSE is below 5mm or we have 12 segments
     i = 1
@@ -215,20 +217,22 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
             # Don't use it on branches that bend a lot. Seriously. 
             # get norm distance between new point and all points in segs
             furthest_distances = np.linalg.norm(segs - new_point, axis=1)
-            print(f"Segment endpoints before iteration {i}:\n{segs}")
-            print(f"New point to be inserted: {new_point}")
-            print(f"Distances from new point to all segment endpoints: {furthest_distances}")
-            print(f"indices of closest two segment endpoints to new point: {np.argsort(furthest_distances)[:2]}")
-            print(f"Insert index for new point: {np.max(np.argsort(furthest_distances)[:2])}")
+            if verbose:
+                print(f"Segment endpoints before iteration {i}:\n{segs}")
+                print(f"New point to be inserted: {new_point}")
+                print(f"Distances from new point to all segment endpoints: {furthest_distances}")
+                print(f"indices of closest two segment endpoints to new point: {np.argsort(furthest_distances)[:2]}")
+                print(f"Insert index for new point: {np.max(np.argsort(furthest_distances)[:2])}")
             idx = np.max(np.argsort(furthest_distances)[:2])
             segs = np.insert(segs, idx, new_point, axis=0)
         # print(f"Segment endpoints after iteration {i}:\n{segs}")
         i += 1
 
         RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    
-    print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
-    #     
+
+    if verbose:
+        print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
+        
 
     if make_plot:
         fig = plt.figure()
