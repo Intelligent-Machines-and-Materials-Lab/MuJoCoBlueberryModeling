@@ -53,6 +53,13 @@ def load_csv_safely(file_path):
     data['Time (s)'] = time_s
     return data
 
+def crop_filename(filename):
+    # remove everything between the trial number and the .csv extension, including the underscore
+    # e.g. bush_1_branch_1_trial_1_height_915_load_cell.csv --> bush_1_branch_1_trial_1.csv
+    parts = filename.split('_')
+    new_filename = '_'.join(parts[:6]) + '.csv'
+    return new_filename
+
 
 if __name__ == "__main__":
 
@@ -70,4 +77,5 @@ if __name__ == "__main__":
         data = convert_to_N(data) # convert the load cell reading from gF to N
         data = crop_end_of_data(data, start_and_end_times.iloc[idx]["end_time"]) # crop the end of the readings first 
         data = crop_beg_of_data(data, start_and_end_times.iloc[idx]["start_time_imu"]) # crop the beginning of the readings second
-        data.to_csv(os.path.join('..', 'data', 'imu_cropped_push_data', push_file), index=False)
+        push_file_name = crop_filename(push_file) # crop the filename to remove the height and load cell info
+        data.to_csv(os.path.join('..', 'data', 'imu_cropped_push_data', push_file_name), index=False)

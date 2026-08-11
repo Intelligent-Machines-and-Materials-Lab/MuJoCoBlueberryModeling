@@ -189,8 +189,8 @@ class TrialSim():
         model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON 
         model.opt.tolerance = 1e-8
 
-        DURATION = 5 # TRIAL_LENGTH
-        DATACAP_RATE = 20 # Hz
+        DURATION = 5 #self.TRIAL_LENGTH
+        DATACAP_RATE = 10 # Hz
         init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
 
         # variables to put data into lists for later plotting
@@ -205,10 +205,26 @@ class TrialSim():
         # -- Displacement controller setup --
         probe_site_id = model.site("probe_contact_site").id
         probe_body_id = int(model.site_bodyid[probe_site_id])
+
+        # Capture position at zero_pos for comparison
+        zero_pos_probe_xpos = data.site_xpos[probe_site_id].copy()
+        print(f"Probe at zero_pos:   x={zero_pos_probe_xpos[0]*1000:.1f} mm, z={zero_pos_probe_xpos[2]*1000:.1f} mm")
+
+        # Let the branch settle briefly before capturing the initial probe position.
+        # Gravity only deflects the branch ~1mm from zero_pos, so a short settle suffices.
+        SETTLE_TIME = 0.1  # seconds to settle under gravity (no applied force)
+        while data.time < SETTLE_TIME:
+            mujoco.mj_step(model, data)
+        data.time = 0.0  # reset clock so DURATION counts from settled state
+
         probe_init_xpos = data.site_xpos[probe_site_id].copy()
+        print(f"Probe after settle:  x={probe_init_xpos[0]*1000:.1f} mm, z={probe_init_xpos[2]*1000:.1f} mm")
+        dx_settle = probe_init_xpos[0] - zero_pos_probe_xpos[0]
+        dz_settle = probe_init_xpos[2] - zero_pos_probe_xpos[2]
+        print(f"Gravitational shift: dx={dx_settle*1000:.1f} mm, dz={dz_settle*1000:.1f} mm  (Euclidean={np.sqrt(dx_settle**2+dz_settle**2)*1000:.1f} mm)")
 
         # -- Controller setup --
-        pid = PID(Kp=150, Ki=22, Kd=10, setpoint=0)
+        pid = PID(Kp=750, Ki=100, Kd=20, setpoint=0, sample_time=None)
         pid.output_limits = (-10, 50)  # force limits in Newtons
 
         pid.setpoint = 0 # mm, total displacement
@@ -218,11 +234,16 @@ class TrialSim():
 
         with mujoco.Renderer(model, width=640, height=480) as renderer:
             while data.time < DURATION:
-                    # -- measure current x-displacement of probe contact site --
-                current_disp_m = data.site_xpos[probe_site_id][0] - probe_init_xpos[0]
+                # -- measure current displacement of probe contact site --
+                # Project displacement onto the push direction (signed, so PID can push and resist)
+                push_angle = self.Branch.editor.init_probe_angle + self.force_angle
+                current_disp_x = data.site_xpos[probe_site_id][0] - probe_init_xpos[0]
+                current_disp_z = data.site_xpos[probe_site_id][2] - probe_init_xpos[2]
+                current_disp_m = current_disp_x * np.cos(push_angle) + current_disp_z * (-np.sin(push_angle))
 
                 # -- PID: drive current displacement toward target --
-                force = last_force + pid(current_disp_m)
+                # Pass dt explicitly so PID uses simulation time, not wall-clock time
+                force = last_force + pid(current_disp_m, dt=model.opt.timestep)
 
                 # -- apply force at probe contact site --
                 data.qfrc_applied[:] = 0
@@ -246,14 +267,16 @@ class TrialSim():
                     timevals.append(data.time)
                     forcevals.append(force)
                     probevals.append(current_disp_m)
+                    # print(f"Displacement: {current_disp_m*1000:.1f} mm, setpoint: {pid.setpoint*1000:.1f} mm, error: {pid._last_error*1000:.1f} mm")
+                    # print(f"PID force: {force:.3f} N")
                 
                 # update the control position at the specified rate
                 if int(data.time * CTRL_POS_UPDATE_RATE) > int((data.time - model.opt.timestep) * CTRL_POS_UPDATE_RATE):
                     pre_control_timevals.append(data.time)
                     pre_control_forcevals.append(force)
                     pre_control_probeposes.append(current_disp_m)
-                    last_force = force
-                    print(f"Time: {data.time:.3f}s, Current Displacement: {current_disp_m*1000:.3f} mm, Force Applied: {force:.3f} N")
+                    last_force = force  # save the last applied force for the next PID update
+                    print(f"Time: {data.time:.3f}s, Current Displacement: {current_disp_m*1000:.1f} mm, Force Applied: {force:.3f} N")       
                     print(f"Probe angle: {np.degrees(self.Branch.editor.init_probe_angle):.2f}; Force components: x={force_x:.3f} N, z={force_z:.3f} N")
                     pid.setpoint += 0.0005  # increment by 0.5 mm (0.0005 m)
 
@@ -416,17 +439,11 @@ if __name__ == "__main__":
     morris_problem = {
         'num_vars': 4,
         'names': ['flex_modulus', 'num_segments', 'diam_func_factor', 'probe_angle'],
-        'bounds': [[1.68e9, 7.31e9], 
-                   [4, 12], 
+        'bounds': [[1.82e9, 8.05e9], 
+        # 'bounds': [[1.68e9, 7.31e9],
+                   [3, 10], 
                    [0, 1],
                    [-np.pi/6, np.pi/6]]}
-    rsa_problem = {
-        'num_vars': 3,
-        'names': ['flex_modulus', 'num_segments', 'diam_func_factor'],
-        'bounds': [[1.68e9, 7.31e9], 
-                   [4, 12], 
-                   [0, 1]]
-    }
 
     Stiffness_Sis = []
     Error_Sis = []
@@ -438,14 +455,14 @@ if __name__ == "__main__":
         print ("Starting bush number: ", BUSH_NUM)
         print ("----------------------------------------")
 
-        # for BRANCH_NUM in [1, 2, 3]:
-        for BRANCH_NUM in [1]:
+        for BRANCH_NUM in [1, 2, 3]:
+        # for BRANCH_NUM in [1]:
             print ("----------------------------------------")
             print ("Starting bush :", BUSH_NUM, " branch: ", BRANCH_NUM)
             print ("----------------------------------------")
             
-            # for TRIAL_NUM in [1, 2, 3]:
-            for TRIAL_NUM in [1]:
+            for TRIAL_NUM in [1, 2, 3]:
+            # for TRIAL_NUM in [1]:
                 # Check to see if it's one of the exceptions we're skipping.. 
                 if BUSH_NUM ==14:
                     if BRANCH_NUM == 2 and TRIAL_NUM == 3:
@@ -509,6 +526,13 @@ if __name__ == "__main__":
                 'branch': BRANCH_NUM,
                 'trial': TRIAL_NUM,
                 })
+                # pickle Stiffness_Sis and Error_Sis to results folder
+                with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
+                    pickle.dump(Stiffness_Sis, f)
+                with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
+                    pickle.dump(Error_Sis, f)
+                with open(os.path.join(results_folder, 'all_trial_data.pkl'), 'wb') as f:
+                    pickle.dump(all_trial_data, f)
 
     # make a scatterplot with mu star on the x axis and sigma on the y axis for each parameter, for both stiffness and error
     # each parameter should be a different color. The stiffness and error will be on different plots. 
