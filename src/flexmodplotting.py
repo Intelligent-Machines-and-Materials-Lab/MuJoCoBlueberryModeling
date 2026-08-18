@@ -1,10 +1,12 @@
 # format from https://matplotlib.org/3.10.9/gallery/lines_bars_and_markers/barchart.html
 
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 from cmcrameri import cm
 import scipy.stats as stats
+from matplotlib.ticker import MaxNLocator
 
 # load flexural modulus data from CSV file into a pandas DataFrame
 df = pd.read_csv('data/flexModTable.csv')
@@ -22,6 +24,9 @@ green_dormant = df[(df['Age'] == 'green') & (df['Season'] == 'dormant')]['Modulu
 green_fruiting = df[(df['Age'] == 'green') & (df['Season'] == 'fruiting')]['Modulus'].tolist()
 middle_dormant = df[(df['Age'] == 'middle') & (df['Season'] == 'dormant')]['Modulus'].tolist()
 middle_fruiting = df[(df['Age'] == 'middle') & (df['Season'] == 'fruiting')]['Modulus'].tolist()
+
+variety_colors = [cm.batlowKS.colors[0], cm.batlowKS.colors[1], cm.batlowKS.colors[2]]
+age_colors = ['#887162', '#75a3c5', '#c5bd75'] 
 
 # season = ("Dormant (Legacy, Duke, EarliBlue, Elliott)", "Fruiting (Duke, Liberty, Draper)")
 season = ("Dormant (Duke)", "Fruiting (Duke)")
@@ -45,23 +50,91 @@ season_stdevs = {
     'fruiting': [np.std(woody_fruiting), np.std(green_fruiting)]
 }
 
-stat, p_value = stats.ttest_ind(all_dormant, all_fruiting, equal_var=False)
-print(f"T-test between dormant and fruiting seasons: stat={stat}, p-value={p_value}")
+SHOW_BOXPLOT = True
 
-# duke_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'Duke')]['Modulus'].tolist()
+if SHOW_BOXPLOT:
+    stat, p_value = stats.ttest_ind(all_dormant, all_fruiting, equal_var=False)
+    print(f"T-test between dormant and fruiting seasons: stat={stat}, p-value={p_value}")
+
+    # set the size of the figure and the layout to be constrained
+    fig, ax = plt.subplots(figsize=(6, 2.25), layout='constrained')
+    ax.boxplot([all_dormant, all_fruiting], 
+            labels=['Dormant', 'Fruiting'], 
+            vert=False, widths=[.525,.525])
+    ax.set_xlabel('Flexural Modulus (GPa)')
+    plt.show()
+
+duke_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'Duke')]['Modulus'].tolist()
 # elliot_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'Elliott')]['Modulus'].tolist()
 # earliblue_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'EarliBlue')]['Modulus'].tolist()
 # legacy_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'Legacy')]['Modulus'].tolist()
 
-# duke_fruiting = df[(df['Season'] == 'fruiting') & (df['Varietal'] == 'Duke')]['Modulus'].tolist()
-# liberty_fruiting = df[(df['Season'] == 'fruiting') & (df['Varietal'] == 'Liberty')]['Modulus'].tolist()
-# draper_fruiting = df[(df['Season'] == 'fruiting') & (df['Varietal'] == 'Draper')]['Modulus'].tolist()
+duke_fruiting = df[(df['Season'] == 'fruiting') & (df['Varietal'] == 'Duke')]['Modulus'].tolist()
+liberty_fruiting = df[(df['Season'] == 'fruiting') & (df['Varietal'] == 'Liberty')]['Modulus'].tolist()
+draper_fruiting = df[(df['Season'] == 'fruiting') & (df['Varietal'] == 'Draper')]['Modulus'].tolist()
 
-# print(f"Duke Fruiting Mean and Stdev: {np.mean(duke_fruiting)}, {np.std(duke_fruiting)}")
-# print(f"Liberty Fruiting Mean and Stdev: {np.mean(liberty_fruiting)}, {np.std(liberty_fruiting)}")
-# print(f"Draper Fruiting Mean and Stdev: {np.mean(draper_fruiting)}, {np.std(draper_fruiting)}")
+stat, p_value = stats.ttest_ind(duke_fruiting, liberty_fruiting, equal_var=False)
+print(f"T-test between Duke and Liberty fruiting: stat={stat}, p-value={p_value}")
 
-# fig, (ax, ax2) = plt.subplots(1, 2, layout='constrained', sharey=True, sharex=True)
+stat, p_value = stats.ttest_ind(duke_fruiting, draper_fruiting, equal_var=False)
+print(f"T-test between Duke and Draper fruiting: stat={stat}, p-value={p_value}")
+
+stat, p_value = stats.ttest_ind(draper_fruiting, liberty_fruiting, equal_var=False)
+print(f"T-test between Draper and Liberty fruiting: stat={stat}, p-value={p_value}")
+
+# fig, axs = plt.subplots(3, 2, layout='constrained', sharex=True, figsize=(10, 12))
+
+# vars = [woody_fruiting, duke_fruiting, middle_fruiting, liberty_fruiting, green_fruiting, draper_fruiting]
+# names = ['Woody', 'Duke', 'Middle', 'Liberty', 'Green', 'Draper']
+
+# for i, ax in enumerate(axs.flat):
+#     ax.hist(vars[i], bins=8, alpha=0.7, color=age_colors[i%3] if i < 3 else variety_colors[i%3])
+#     ax.axvline(np.mean(vars[i]), color='black', linestyle='dashed', linewidth=1, label=f'Mean: {np.mean(vars[i]):.2f} GPa')
+#     ax.set_title(names[i], fontsize=14)
+#     ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+#     if i == 0 or i == 2 or i == 4:
+#         ax.set_ylabel('Sample Count')
+#     ax.legend()
+
+# axs[2, 0].set_xlabel('Flexural Modulus (GPa)')
+# axs[2, 1].set_xlabel('Flexural Modulus (GPa)')
+
+SHOW_EVENTPLOT = False
+
+if SHOW_EVENTPLOT:
+    data = [[woody_fruiting, middle_fruiting, green_fruiting], [duke_fruiting, liberty_fruiting, draper_fruiting]]
+    labels = [['Woody', 'Middle', 'Green'], ['Duke', 'Liberty', 'Draper']]
+    colors = [age_colors, variety_colors]
+
+    fig2, axs2 = plt.subplots(1, 2, layout='constrained', sharex=True, figsize=(10, 5))
+
+    for i, ax in enumerate(axs2):
+        ec = ax.eventplot(data[i], colors=colors[i], orientation='horizontal', lineoffsets=[1, 2, 3], linelengths=0.8)
+        ax.eventplot([[np.mean(d)] for d in data[i]], colors='black', orientation='horizontal', lineoffsets=[1, 2, 3], linelengths=0.8, linewidths=2, linestyles='dashed')
+        mean_handle = Line2D([0], [0], color='black', linewidth=2, linestyle='dashed')
+        ax.legend(handles=ec + [mean_handle], labels=labels[i] + ['Average'], title='Age' if i == 0 else 'Variety', fontsize=12, loc='upper right', title_fontsize=12)
+        ax.set_xlabel('Flexural Modulus (GPa)', fontsize=14)
+        ax.yaxis.set_major_locator(plt.NullLocator())
+        ax.tick_params(axis='x', labelsize=12)
+
+    bfr = 0.2
+    # x_max_plt1 = max(max(woody_fruiting), max(middle_fruiting), max(green_fruiting))
+    x2 = max(max(duke_fruiting), max(liberty_fruiting), max(draper_fruiting))
+    x1 = max(max(draper_fruiting), max(liberty_fruiting))
+    axs2[1].plot([x1+bfr, x1+bfr*2, x1+bfr*2, x1+bfr], [2, 2, 3, 3], lw=1.5, color='black')
+    axs2[1].plot([x2+bfr, x2+bfr*2, x2+bfr*2, x2+bfr], [1, 1, 2, 2], lw=1.5, color='black')
+    axs2[1].text(x2+0.5, 1.5, '*', ha='left', va='center', fontsize=16)
+    axs2[1].text(x1+0.5, 2.5, '**', ha='left', va='center', fontsize=16)
+    axs2[1].set_xlim(1, 6.2)
+    axs2[1].text(0,0, 'Note: * p<0.008, ** p<0.004', fontsize=14, ha='left', va='bottom', transform=axs2[1].transAxes)
+    plt.show()
+
+stat, p_value = stats.ttest_ind(duke_dormant, duke_fruiting, equal_var=True)
+print(f"T-test between Duke dormant and fruiting: stat={stat}, p-value={p_value}")
+print(f"Duke dormant mean: {np.mean(duke_dormant):.2f} GPa, Duke fruiting mean: {np.mean(duke_fruiting):.2f} GPa")
+
+
+# fig, (ax1, ax2) = plt.subplots(1, 2, layout='constrained', sharey=True, sharex=True)
 # facecolors = [cm.batlowKS.colors[0], cm.batlowKS.colors[1], cm.batlowKS.colors[2], cm.batlowKS.colors[3]]
 # ax.hist([duke_dormant, elliot_dormant, earliblue_dormant, legacy_dormant], 
 #         bins=10, 
@@ -128,7 +201,7 @@ print(f"T-test between dormant and fruiting seasons: stat={stat}, p-value={p_val
 # # ax.set_title('Fruiting Season Woody Age Flexural Modulus vs Diameter')  
 
 
-# plt.show()
+plt.show()
 
 
 
