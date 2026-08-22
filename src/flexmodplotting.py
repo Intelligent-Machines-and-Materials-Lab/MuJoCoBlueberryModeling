@@ -17,6 +17,7 @@ dormant_mean = np.mean(all_dormant)
 dormant_stdev = np.std(all_dormant)
 fruiting_mean = np.mean(all_fruiting)
 fruiting_stdev = np.std(all_fruiting)
+print(f"Dormant mean: {dormant_mean:.2f} GPa, Dormant stdev: {dormant_stdev:.2f} GPa")
 
 woody_dormant = df[(df['Age'] == 'woody') & (df['Season'] == 'dormant')]['Modulus'].tolist()
 woody_fruiting = df[(df['Age'] == 'woody') & (df['Season'] == 'fruiting')]['Modulus'].tolist()
@@ -50,7 +51,7 @@ season_stdevs = {
     'fruiting': [np.std(woody_fruiting), np.std(green_fruiting)]
 }
 
-SHOW_BOXPLOT = True
+SHOW_BOXPLOT = False
 
 if SHOW_BOXPLOT:
     stat, p_value = stats.ttest_ind(all_dormant, all_fruiting, equal_var=False)
@@ -62,6 +63,7 @@ if SHOW_BOXPLOT:
             labels=['Dormant', 'Fruiting'], 
             vert=False, widths=[.525,.525])
     ax.set_xlabel('Flexural Modulus (GPa)')
+    # plt.savefig(f"images/flexmodbyseasonv1_1.pdf", dpi=300)
     plt.show()
 
 duke_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'Duke')]['Modulus'].tolist()
@@ -99,7 +101,7 @@ print(f"T-test between Draper and Liberty fruiting: stat={stat}, p-value={p_valu
 # axs[2, 0].set_xlabel('Flexural Modulus (GPa)')
 # axs[2, 1].set_xlabel('Flexural Modulus (GPa)')
 
-SHOW_EVENTPLOT = False
+SHOW_EVENTPLOT = True
 
 if SHOW_EVENTPLOT:
     data = [[woody_fruiting, middle_fruiting, green_fruiting], [duke_fruiting, liberty_fruiting, draper_fruiting]]
@@ -127,6 +129,7 @@ if SHOW_EVENTPLOT:
     axs2[1].text(x1+0.5, 2.5, '**', ha='left', va='center', fontsize=16)
     axs2[1].set_xlim(1, 6.2)
     axs2[1].text(0,0, 'Note: * p<0.008, ** p<0.004', fontsize=14, ha='left', va='bottom', transform=axs2[1].transAxes)
+    plt.savefig(f"images/flexmodbyvarietyandage2_0.pdf", dpi=300)
     plt.show()
 
 stat, p_value = stats.ttest_ind(duke_dormant, duke_fruiting, equal_var=True)

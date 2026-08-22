@@ -9,6 +9,8 @@ build_branch
 """
 
 
+from xml.parsers.expat import model
+
 import mujoco
 import numpy as np
 import mediapy as media
@@ -19,6 +21,9 @@ from IPython.display import HTML, display
 from scipy.spatial.transform import Rotation as R 
 
 BROWN = np.array([0.4, 0.24, 0.0, 1])
+POLYLINE_GOLD = np.array([220/255, 159/255, 85/255, 1])
+DISCRETIZED_GREEN = np.array([161/255, 142/255, 56/255, 1])
+LOAD_SITE_GREEN = np.array([98/255, 113/255, 76/255, 1])
 
 class CaneEditor():
     def __init__(self, xml_name, flex_mod = 4.9e9):
@@ -112,7 +117,8 @@ class CaneEditor():
                                  pos=[0, 0, seg_length/2], 
                                  type=mujoco.mjtGeom.mjGEOM_BOX,
                                  size=[radii[i], radii[i], seg_length/2],
-                                 rgba=brown_variant)
+                                #  rgba=brown_variant)
+                                 rgba=DISCRETIZED_GREEN)
             parent_body = child_body
 
         self.model = self.spec.compile()
@@ -338,7 +344,7 @@ class CaneEditor():
                     if hyp2 < contact_branch_length*2:
                         body.add_site(name="probe_contact_site",
                               pos=[0, 0, hyp2],
-                              rgba=[1, 0, 0, 1])
+                              rgba=LOAD_SITE_GREEN)
                         if verbose:
                             print(f"Added probe contact site to body {body_name} at local position [0, 0, {hyp2:.3f}]")
                     else:
@@ -406,7 +412,8 @@ class CaneEditor():
         """
         data = mujoco.MjData(self.model)
         data.qpos[:] = pos  
-        with mujoco.Renderer(self.model, height=480, width=640) as renderer:
+        self.model.vis.quality.offsamples = 8
+        with mujoco.Renderer(self.model, height=1080, width=1920) as renderer:
             mujoco.mj_forward(self.model, data)
             renderer.update_scene(data)
             media.write_image(filename, renderer.render(), fmt='pdf')

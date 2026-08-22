@@ -3,6 +3,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import cmcrameri.cm as cm
 import numpy as np
+import pickle
+from scipy.stats import linregress
 
 def load_metadata(file_path):
     # Read CSV directly with pandas, automatically inferring numeric types
@@ -79,7 +81,7 @@ def plot_slope_data_as_columns_with_both_splines(metadata_df, spline_df_og_radii
     ax.grid(axis='y', linestyle='--', color='gray', alpha=0.7, zorder=0)
     ax.set_axisbelow(True)  # Ensure grid is behind the bars
     ax.legend(fontsize=16)  # Set legend font size
-    ax.set_ylim(0, 1.7)
+    # ax.set_ylim(0, 1.7)
     ax.set_xlabel('Bush/Branch/Trial', fontsize=16)
     ax.set_ylabel('Stiffness (N/mm)', fontsize=16)
     plt.tight_layout()
@@ -90,8 +92,9 @@ def plot_slope_data_as_scatterplot(metadata_df):
     # fig = plt.figure(figsize=(10, 6))
     fig, ax = plt.subplots(figsize=(18, 9))
     ax.grid(True, linestyle='--', color='gray', alpha=0.7, zorder=-1)
+    # plt.fill([0, 0, .4, .4, 0], [0, .8, .8, 0, 0], color='lightgray', zorder=-.5, alpha=0.5)
     ax.set_axisbelow(True)  # Ensure grid is behind the points
-    plt.plot([0,1], [0,1], color='gray', linestyle='--', zorder=0)
+    plt.plot([0,1.2], [0,1.2], color='gray', linestyle='--', zorder=0)
     branch1df = metadata_df[metadata_df['branch'] == 1]
     branch2df = metadata_df[metadata_df['branch'] == 2]
     branch3df = metadata_df[metadata_df['branch'] == 3]
@@ -126,15 +129,74 @@ def plot_slope_data_as_scatterplot(metadata_df):
     handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6)
     legend2 = ax.legend(handles[::-1], trialloclabels, loc="upper left", bbox_to_anchor=(.215, 1), title="Trial Height",labelspacing=1.5, fontsize=16, title_fontsize=16)
     ax.tick_params(axis='both', which='major', labelsize=14)
-    plt.ylim(0, 1.5)
-    plt.xlim(0, 1.02)
+    # plt.ylim(0, 1.5)
+    # plt.xlim(0, 1.02)
+    plt.ylim(-.01, .8)
+    plt.xlim(-.01, .4)
+    plt.xlabel('Field Stiffness (N/mm)', fontsize=16)
+    plt.ylabel('Simulation Stiffness (N/mm)', fontsize=16)
+    
+    # plt.title('Field vs Simulation Average Stiffness')
+    # plt.savefig(f"images/scatterplot_wlims_v1_1.pdf", dpi=300)
+    plt.show()
+
+    # smaller points = smaller branch num = thinner branches
+    # smaller number label = smaller trial number = higher on the branch
+
+def plot_slope_data_as_scatterplot_with_mask(metadata_df, mask):
+    # fig = plt.figure(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(18, 9))
+    ax.grid(True, linestyle='--', color='gray', alpha=0.7, zorder=-1)
+    ax.set_axisbelow(True)  # Ensure grid is behind the points
+    plt.plot([0,1.2], [0,1.2], color='gray', linestyle='--', zorder=0)
+    metadata_df['mask'] = mask
+    branch1df = metadata_df[metadata_df['branch'] == 1]
+    branch2df = metadata_df[metadata_df['branch'] == 2]
+    branch3df = metadata_df[metadata_df['branch'] == 3]
+
+    # Set consistent color range for all scatter plots
+    vmin = metadata_df['bush_idx'].min()
+    vmax = metadata_df['bush_idx'].max()
+
+    ec1 = ['black' if m else 'none' for m in branch1df['mask']]
+    ec2 = ['black' if m else 'none' for m in branch2df['mask']]
+    ec3 = ['black' if m else 'none' for m in branch3df['mask']]
+
+    scatter = ax.scatter(branch1df['field_stiffness'], branch1df['sim_stiffness'], s=(10*branch1df['trial'])**2, cmap=cm.batlow, c=branch1df['bush_idx'], vmin=vmin, vmax=vmax, label='Branch 1', marker='o', edgecolors=ec1, linewidths=1.5) # cmap=cm.batlowKS
+    scatter2 = ax.scatter(branch2df['field_stiffness'], branch2df['sim_stiffness'], s=(10*branch2df['trial'])**2, cmap=cm.batlow, c=branch2df['bush_idx'], vmin=vmin, vmax=vmax, label='Branch 2', marker='s', edgecolors=ec2, linewidths=1.5) # cmap=cm.batlowKS
+    scatter3 = ax.scatter(branch3df['field_stiffness'], branch3df['sim_stiffness'], s=(10*branch3df['trial'])**2, cmap=cm.batlow, c=branch3df['bush_idx'], vmin=vmin, vmax=vmax, label='Branch 3', marker='^', edgecolors=ec3, linewidths=1.5) # cmap=cm.batlowKS
+    # scatter = ax.scatter(metadata_df['field_stiffness'], metadata_df['sim_stiffness'], s=(3*metadata_df['trial'])**3, cmap=cm.batlow, c=metadata_df['bush_idx']) # cmap=cm.batlowKS
+    # for i, txt in enumerate(metadata_df['branch']):
+    #     ax.annotate(txt, (metadata_df['field_stiffness'][i]+(.002*metadata_df['branch'][i]**2), metadata_df['sim_stiffness'][i]+(.002*metadata_df['branch'][i]**2)), fontsize=16, alpha=0.7)
+    
+    bushnumlabels = ["1", "2", "3", "4", "5", "6"]
+    # Create custom legend handles for all 6 bush indices
+    from matplotlib.patches import Patch
+    legend_handles = [Patch(facecolor=cm.batlow((i-vmin)/(vmax-vmin)), alpha=1) for i in range(int(vmin), int(vmax)+1)]
+    legend1 = ax.legend(legend_handles, bushnumlabels, loc="upper left", fontsize=16, title="Bush Num", title_fontsize=16)
+    ax.add_artist(legend1)
+
+    branchnumlabels = ["1", "2", "3"]
+    from matplotlib.lines import Line2D
+    branch_legend_handles = [Line2D([0], [0], marker='o', color='w', label=branchnumlabels[0], markerfacecolor='gray', markersize=10, alpha=0.6),
+                             Line2D([0], [0], marker='s', color='w', label=branchnumlabels[1], markerfacecolor='gray', markersize=10, alpha=0.6),
+                             Line2D([0], [0], marker='^', color='w', label=branchnumlabels[2], markerfacecolor='gray', markersize=10, alpha=0.6)]
+    branch_legend = ax.legend(handles=branch_legend_handles, loc="upper left", bbox_to_anchor=(.1, 1), fontsize=16, title="Branch Num", title_fontsize=16)
+    ax.add_artist(branch_legend)
+
+    trialloclabels = ["Low", "Middle", "High"]
+    handles, labels = scatter.legend_elements(prop="sizes", alpha=0.6)
+    legend2 = ax.legend(handles[::-1], trialloclabels, loc="upper left", bbox_to_anchor=(.215, 1), title="Trial Height",labelspacing=1.5, fontsize=16, title_fontsize=16)
+    ax.tick_params(axis='both', which='major', labelsize=14)
+    # plt.ylim(0, 1.5)
+    # plt.xlim(0, 1.02)
+    # plt.ylim(0, 4.2)
+    # plt.xlim(0, 1.2)
     plt.xlabel('Field Stiffness (N/mm)', fontsize=16)
     plt.ylabel('Simulation Stiffness (N/mm)', fontsize=16)
     # plt.title('Field vs Simulation Average Stiffness')
     plt.show()
 
-    # smaller points = smaller branch num = thinner branches
-    # smaller number label = smaller trial number = higher on the branch
 
 def plot_slope_data_as_scatterplot_with_splines(metadata_df, spline_df):
     # fig = plt.figure(figsize=(10, 6))
@@ -271,21 +333,34 @@ def plot_push_data_with_regression_line(bush_num, branch_num, trial_num, make_le
     # save png to images/forcedisplacementplots/pushdata_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png
     # plt.savefig(f"images/forcedisplacementplots/for_paper/pushdataWregression_bush_{bush_num}_branch_{branch_num}_trial_{trial_num}.png", dpi=300)
 
+def print_slope_and_R2_of_data(metadata):
+    slope, _, r, _, _ = linregress(metadata['field_stiffness'], metadata['sim_stiffness'])
+    print(f"Slope: {slope}, R^2: {r**2}")
+
+
 if __name__ == '__main__':
-    metadata_df = load_metadata('data/results/metadata_2026-02-23_23-10.csv')
-    spline_df_new = load_metadata('data/results/metadata_2026-02-28_15-54.csv')
-    spline_df_og = load_metadata('data/results/metadata_2026-02-27_21-20.csv')
+    with open('data/results/2026-08-18_16-12/metadata.pkl', 'rb') as f:
+        metadata = pickle.load(f)
+    with open('data/results/2026-08-18_16-12/mask.pkl', 'rb') as f:
+        diam_important_mask = pickle.load(f)
+    metadata_df = pd.DataFrame(metadata)
+    # metadata_df = load_metadata('data/results/metadata_2026-02-23_23-10.csv')
+    # spline_df_new = load_metadata('data/results/metadata_2026-02-28_15-54.csv')
+    # spline_df_og = load_metadata('data/results/metadata_2026-02-27_21-20.csv')
     # metadata_df = load_metadata('data/results/metadata_2026-02-23_11-39.csv')
     metadata_df = add_bush_idx(metadata_df)
     metadata_df = add_height_str_labels(metadata_df)
     metadata_df = add_full_labels(metadata_df)
-    # plot_slope_data_as_scatterplot(metadata_df)
+    plot_slope_data_as_scatterplot(metadata_df)
+    # print_slope_and_R2_of_data(metadata_df)
+    
+    # plot_slope_data_as_scatterplot_with_mask(metadata_df, diam_important_mask)
     # plot_error_data_as_boxplots(metadata_df)
     # plot_slope_data_as_columns(metadata_df)
     # plot_slope_data_as_columns_with_splines(metadata_df, spline_df)
     # plot_slope_data_as_scatterplot_with_splines(metadata_df, spline_df)
 
-    plot_slope_data_as_columns_with_both_splines(metadata_df, spline_df_og, spline_df_new)
+    # plot_slope_data_as_columns_with_both_splines(metadata_df, spline_df_og, spline_df_new)
 
     # fig, axs = plt.subplots(2, 3, figsize=(11, 6))
     # # top left

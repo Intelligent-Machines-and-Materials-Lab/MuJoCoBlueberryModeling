@@ -177,7 +177,7 @@ def get_angles_between_segments(segments):
 
     return angles
 
-def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8, verbose=False):
+def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8, verbose=False, disc_type='RMSE'):
     # load txt file
     curve_df = pd.read_csv(filepath, delimiter=' ', header=None)
     curve = curve_df.to_numpy()
@@ -195,45 +195,20 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
     if verbose:
         print(f"Initial RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
 
-    # iterate until MSE is below 5mm or we have 12 segments
+    # iterate until MSE is below 5mm or we have the designated # of segments
     i = 1
-    # RMSE > 5
-    while len(segs) < num_segs + 1:
-        random_points = np.random.randint(0, curve.shape[0], 20)
-        random_curve = curve[random_points]
-        random_dists = get_distances_between_curve_and_segments(random_curve, segs)
-
-        furthest_idx = np.argmax(random_dists)
-        new_point = random_curve[furthest_idx]
-        # print(f"Largest distances from random points to segments: {np.max(random_dists):.3f} at {random_curve[np.argmax(random_dists)]}")
-
-        if strictly_increasing:
-            # insert new point into segs based on y-value
-            existing_yvals= segs[:,1]
-            idx = bisect.bisect_right(existing_yvals, new_point[1])
-            segs = np.insert(segs, idx, new_point, axis=0)
-        else:
-            # This just exists for 9-1-1 that needs to be built differently. 
-            # Don't use it on branches that bend a lot. Seriously. 
-            # get norm distance between new point and all points in segs
-            furthest_distances = np.linalg.norm(segs - new_point, axis=1)
-            if verbose:
-                print(f"Segment endpoints before iteration {i}:\n{segs}")
-                print(f"New point to be inserted: {new_point}")
-                print(f"Distances from new point to all segment endpoints: {furthest_distances}")
-                print(f"indices of closest two segment endpoints to new point: {np.argsort(furthest_distances)[:2]}")
-                print(f"Insert index for new point: {np.max(np.argsort(furthest_distances)[:2])}")
-            idx = np.max(np.argsort(furthest_distances)[:2])
-            segs = np.insert(segs, idx, new_point, axis=0)
-        # print(f"Segment endpoints after iteration {i}:\n{segs}")
-        i += 1
-
-        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-
+    if disc_type == 'RMSE':
+        while RMSE > 5:
+            segs, RMSE = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose)
+            i += 1
+    elif disc_type == 'num_segs':
+        while len(segs) < num_segs + 1:
+            segs, RMSE = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose)
+            i += 1
+        
     if verbose:
         print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
         
-
     if make_plot:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -250,6 +225,38 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
     # print(f"Final RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
     # print(f"Final segment endpoints:\n{segs}")
+    return segs, RMSE
+
+def run_segmentation(curve, judgement_curve, segs, strictly_increasing=True, verbose=False):
+    random_points = np.random.randint(0, curve.shape[0], 20)
+    random_curve = curve[random_points]
+    random_dists = get_distances_between_curve_and_segments(random_curve, segs)
+
+    furthest_idx = np.argmax(random_dists)
+    new_point = random_curve[furthest_idx]
+    # print(f"Largest distances from random points to segments: {np.max(random_dists):.3f} at {random_curve[np.argmax(random_dists)]}")
+
+    if strictly_increasing:
+        # insert new point into segs based on y-value
+        existing_yvals= segs[:,1]
+        idx = bisect.bisect_right(existing_yvals, new_point[1])
+        segs = np.insert(segs, idx, new_point, axis=0)
+    else:
+        # This just exists for 9-1-1 that needs to be built differently. 
+        # Don't use it on branches that bend a lot. Seriously. 
+        # get norm distance between new point and all points in segs
+        furthest_distances = np.linalg.norm(segs - new_point, axis=1)
+        if verbose:
+            print(f"Segment endpoints before this iteration:\n{segs}")
+            print(f"New point to be inserted: {new_point}")
+            print(f"Distances from new point to all segment endpoints: {furthest_distances}")
+            print(f"indices of closest two segment endpoints to new point: {np.argsort(furthest_distances)[:2]}")
+            print(f"Insert index for new point: {np.max(np.argsort(furthest_distances)[:2])}")
+        idx = np.max(np.argsort(furthest_distances)[:2])
+        segs = np.insert(segs, idx, new_point, axis=0)
+    # print(f"Segment endpoints after iteration {i}:\n{segs}")
+
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
     return segs, RMSE
 
 def plot_obj_file(filepath):
