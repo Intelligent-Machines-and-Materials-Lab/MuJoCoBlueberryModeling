@@ -8,7 +8,7 @@
   <visual>
     <headlight diffuse=".9 .9 .9" specular=".75 .75 .75"/>
     <!-- <headlight pos="1.23 -.034 0.68" diffuse=".9 .9 .9" specular=".75 .75 .75"/> -->
-    <global orthographic="false" fovy="45" elevation="-15" />
+    <global orthographic="false" fovy="45" elevation="-15" offwidth="1920" offheight="1080"/>
     <!-- <map fogstart="2" fogend="8" />
     <rgba fog="1 1 1 1"/> -->
   </visual>

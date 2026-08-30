@@ -111,11 +111,11 @@ if SHOW_EVENTPLOT:
     fig2, axs2 = plt.subplots(1, 2, layout='constrained', sharex=True, figsize=(10, 5))
 
     for i, ax in enumerate(axs2):
-        ec = ax.eventplot(data[i], colors=colors[i], orientation='horizontal', lineoffsets=[1, 2, 3], linelengths=0.8)
+        ec = ax.eventplot(data[i], colors=colors[i], orientation='horizontal', lineoffsets=[1, 2, 3], linelengths=0.8, linewidths=2)
         ax.eventplot([[np.mean(d)] for d in data[i]], colors='black', orientation='horizontal', lineoffsets=[1, 2, 3], linelengths=0.8, linewidths=2, linestyles='dashed')
         mean_handle = Line2D([0], [0], color='black', linewidth=2, linestyle='dashed')
         ax.legend(handles=ec + [mean_handle], labels=labels[i] + ['Average'], title='Age' if i == 0 else 'Variety', fontsize=12, loc='upper right', title_fontsize=12)
-        ax.set_xlabel('Flexural Modulus (GPa)', fontsize=14)
+        ax.set_xlabel('Flexural Modulus (GPa)', fontsize=16)
         ax.yaxis.set_major_locator(plt.NullLocator())
         ax.tick_params(axis='x', labelsize=12)
 
@@ -128,8 +128,8 @@ if SHOW_EVENTPLOT:
     axs2[1].text(x2+0.5, 1.5, '*', ha='left', va='center', fontsize=16)
     axs2[1].text(x1+0.5, 2.5, '**', ha='left', va='center', fontsize=16)
     axs2[1].set_xlim(1, 6.2)
-    axs2[1].text(0,0, 'Note: * p<0.008, ** p<0.004', fontsize=14, ha='left', va='bottom', transform=axs2[1].transAxes)
-    plt.savefig(f"images/flexmodbyvarietyandage2_0.pdf", dpi=300)
+    axs2[1].text(0,0, 'Note: * p<0.008, ** p<0.004', fontsize=16, ha='left', va='bottom', transform=axs2[1].transAxes)
+    plt.savefig(f"images/flexmodbyvarietyandage2_1.pdf", dpi=300)
     plt.show()
 
 stat, p_value = stats.ttest_ind(duke_dormant, duke_fruiting, equal_var=True)
