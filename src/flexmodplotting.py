@@ -1,5 +1,6 @@
 # format from https://matplotlib.org/3.10.9/gallery/lines_bars_and_markers/barchart.html
 
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import numpy as np
@@ -7,6 +8,9 @@ import pandas as pd
 from cmcrameri import cm
 import scipy.stats as stats
 from matplotlib.ticker import MaxNLocator
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
 
 # load flexural modulus data from CSV file into a pandas DataFrame
 df = pd.read_csv('data/flexModTable.csv')
@@ -51,7 +55,7 @@ season_stdevs = {
     'fruiting': [np.std(woody_fruiting), np.std(green_fruiting)]
 }
 
-SHOW_BOXPLOT = False
+SHOW_BOXPLOT = True
 
 if SHOW_BOXPLOT:
     stat, p_value = stats.ttest_ind(all_dormant, all_fruiting, equal_var=False)
@@ -63,7 +67,7 @@ if SHOW_BOXPLOT:
             labels=['Dormant', 'Fruiting'], 
             vert=False, widths=[.525,.525])
     ax.set_xlabel('Flexural Modulus (GPa)')
-    # plt.savefig(f"images/flexmodbyseasonv1_1.pdf", dpi=300)
+    plt.savefig(f"images/flexmodbyseasonv1_2.pdf", dpi=300)
     plt.show()
 
 duke_dormant = df[(df['Season'] == 'dormant') & (df['Varietal'] == 'Duke')]['Modulus'].tolist()
@@ -129,7 +133,7 @@ if SHOW_EVENTPLOT:
     axs2[1].text(x1+0.5, 2.5, '**', ha='left', va='center', fontsize=16)
     axs2[1].set_xlim(1, 6.2)
     axs2[1].text(0,0, 'Note: * p<0.008, ** p<0.004', fontsize=16, ha='left', va='bottom', transform=axs2[1].transAxes)
-    plt.savefig(f"images/flexmodbyvarietyandage2_1.pdf", dpi=300)
+    plt.savefig(f"images/flexmodbyvarietyandage2_2.pdf", dpi=300)
     plt.show()
 
 stat, p_value = stats.ttest_ind(duke_dormant, duke_fruiting, equal_var=True)

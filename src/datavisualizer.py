@@ -92,7 +92,7 @@ def plot_slope_data_as_scatterplot(metadata_df):
     # fig = plt.figure(figsize=(10, 6))
     fig, ax = plt.subplots(figsize=(18, 9))
     ax.grid(True, linestyle='--', color='gray', alpha=0.7, zorder=-1)
-    # plt.fill([0, 0, .4, .4, 0], [0, .8, .8, 0, 0], color='lightgray', zorder=-.5, alpha=0.5)
+    # plt.fill([0, 0, .4, .4, 0], [0, 1.2, 1.2, 0, 0], color='lightgray', zorder=-.5, alpha=0.5)
     ax.set_axisbelow(True)  # Ensure grid is behind the points
     plt.plot([0,1.2], [0,1.2], color='gray', linestyle='--', zorder=0)
     branch1df = metadata_df[metadata_df['branch'] == 1]
@@ -131,13 +131,13 @@ def plot_slope_data_as_scatterplot(metadata_df):
     ax.tick_params(axis='both', which='major', labelsize=14)
     # plt.ylim(0, 1.5)
     # plt.xlim(0, 1.02)
-    plt.ylim(-.01, .8)
+    plt.ylim(-.02, 1.2)
     plt.xlim(-.01, .4)
     plt.xlabel('Field Stiffness (N/mm)', fontsize=16)
     plt.ylabel('Simulation Stiffness (N/mm)', fontsize=16)
     
     # plt.title('Field vs Simulation Average Stiffness')
-    # plt.savefig(f"images/scatterplot_wlims_v1_1.pdf", dpi=300)
+    plt.savefig(f"images/scatterplot_wlims_v2_0.pdf", dpi=300)
     plt.show()
 
     # smaller points = smaller branch num = thinner branches
@@ -339,21 +339,35 @@ def print_slope_and_R2_of_data(metadata):
 
 
 if __name__ == '__main__':
-    with open('data/results/2026-08-18_16-12/metadata.pkl', 'rb') as f:
+    # 3EI data (old sampling method)
+    # with open('data/results/2026-08-18_16-12/metadata.pkl', 'rb') as f:
+    #     metadata = pickle.load(f)
+    # 2EI data (new uniform sampling, height:diameter fitting)
+    # with open('data/results/2026-09-03_11-52_Keep/metadata.pkl', 'rb') as f:
+    #     metadata = pickle.load(f)
+    # EI data (new uniform sampling, height:diameter fitting)
+    # with open('data/results/2026-09-03_15-54/metadata.pkl', 'rb') as f:
+    #     metadata = pickle.load(f)
+    # 2EI data (new uniform sampling, length:diameter fitting)
+    with open('data/results/2026-09-04_23-30_naive/metadata.pkl', 'rb') as f:
         metadata = pickle.load(f)
-    with open('data/results/2026-08-18_16-12/mask.pkl', 'rb') as f:
-        diam_important_mask = pickle.load(f)
+    # EI data (new uniform sampling, length:diameter fitting)
+    # with open('data/results/2026-09-04_9-31/metadata.pkl', 'rb') as f:
+    #     metadata = pickle.load(f)
+    # with open('data/results/2026-08-18_16-12/mask.pkl', 'rb') as f:
+    #     diam_important_mask = pickle.load(f)
     metadata_df = pd.DataFrame(metadata)
-    # metadata_df = load_metadata('data/results/metadata_2026-02-23_23-10.csv')
-    # spline_df_new = load_metadata('data/results/metadata_2026-02-28_15-54.csv')
-    # spline_df_og = load_metadata('data/results/metadata_2026-02-27_21-20.csv')
-    # metadata_df = load_metadata('data/results/metadata_2026-02-23_11-39.csv')
+    # for row in metadata_df.itertuples():
+    #     print(row)
     metadata_df = add_bush_idx(metadata_df)
     metadata_df = add_height_str_labels(metadata_df)
     metadata_df = add_full_labels(metadata_df)
-    plot_slope_data_as_scatterplot(metadata_df)
+    # plot_slope_data_as_scatterplot(metadata_df)
     # print_slope_and_R2_of_data(metadata_df)
-    
+    print(f"maximum sim stiffness is: {metadata_df['sim_stiffness'].max()}")
+    print(f"minimum sim stiffness is: {metadata_df['sim_stiffness'].min()}")
+    print(f"maximum field stiffness is: {metadata_df['field_stiffness'].max()}")
+    print(f"minimum field stiffness is: {metadata_df['field_stiffness'].min()}")
     # plot_slope_data_as_scatterplot_with_mask(metadata_df, diam_important_mask)
     # plot_error_data_as_boxplots(metadata_df)
     # plot_slope_data_as_columns(metadata_df)

@@ -105,7 +105,7 @@ class CaneEditor():
             xyzw = R.from_euler('xyz', [euler_x_deg, euler_y_deg, 0.0], degrees=True).as_quat()
             child_body.quat = [xyzw[3], xyzw[0], xyzw[1], xyzw[2]]  # MuJoCo uses [w, x, y, z]
             second_moment_area = (np.pi/4) * (radii[i]**4)
-            k = 3*self.E*second_moment_area / seg_length
+            k = 2*self.E*second_moment_area / seg_length
             self.inverted_k_list.append(1/k)
             if verbose:
                 print(f"Estimated bending stiffness k via beam bending: {k:.1f} Nm/rad")

@@ -189,7 +189,7 @@ class TrialSim():
         model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON 
         model.opt.tolerance = 1e-8
 
-        DURATION = 1 % self.TRIAL_LENGTH
+        DURATION = 10 % self.TRIAL_LENGTH
         DATACAP_RATE = 10 # Hz
         init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
 
@@ -213,8 +213,17 @@ class TrialSim():
         # Let the branch settle briefly before capturing the initial probe position.
         # Gravity only deflects the branch ~1mm from zero_pos, so a short settle suffices.
         SETTLE_TIME = 0.1  # seconds to settle under gravity (no applied force)
-        while data.time < SETTLE_TIME:
+        settle_steps = 0
+        print("Starting settle phase...")
+        while data.time < SETTLE_TIME and settle_steps < 10000:
             mujoco.mj_step(model, data)
+            if data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number > init_warn_count:
+                print(f"Bad acceleration at settle step {settle_steps}")
+                raise RuntimeError("Simulation unstable during settle phase: bad acceleration detected")
+            settle_steps += 1
+        if settle_steps >= 10000:
+            raise RuntimeError("Settle phase exceeded maximum iterations - possible infinite loop")
+        print(f"Settle phase complete after {settle_steps} steps")
         data.time = 0.0  # reset clock so DURATION counts from settled state
 
         probe_init_xpos = data.site_xpos[probe_site_id].copy()
@@ -259,10 +268,9 @@ class TrialSim():
                 # step the simulation
                 mujoco.mj_step(model, data)
                 if data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number > init_warn_count:
-                    print("Acceleration is too damn high! Moving on...")
-                    break
-                
-                # -- save data from sim  -- 
+                    raise RuntimeError("Simulation unstable: bad acceleration detected")
+
+            # -- save data from sim  -- 
                 if len(timevals) < data.time * DATACAP_RATE:
                     timevals.append(data.time)
                     forcevals.append(force)
@@ -277,8 +285,8 @@ class TrialSim():
                     pre_control_probeposes.append(current_disp_m)
                     last_force = force  # save the last applied force for the next PID update
                     print(f"Time: {data.time:.3f}s, Current Displacement: {current_disp_m*1000:.1f} mm, Force Applied: {force:.3f} N")       
-                    print(f"Probe angle: {np.degrees(self.Branch.editor.init_probe_angle):.2f}; Force components: x={force_x:.3f} N, z={force_z:.3f} N")
-                    pid.setpoint += 0.0005  # increment by 0.5 mm (0.0005 m)
+                    print(f"Probe angle: {np.degrees(self.Branch.editor.init_probe_angle+self.force_angle):.2f}; Force components: x={force_x:.3f} N, z={force_z:.3f} N")
+                    pid.setpoint += 0.0005  # increment by 0.5 mm (0.0005 m)                
 
         self.final_qpos = data.qpos.copy()
         self.full_results = {
@@ -334,13 +342,13 @@ class TrialSim():
         return error 
 
 class BranchSim():
-    def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.9e9, num_segs=8, diam_func_factor=1, disc_type='RMSE'):
+    def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.9e9, num_segs=8, diam_func_factor=1, disc_type='RMSE', lin_fit='height'):
         self.BUSH_NUM = BUSH_NUM
         self.BRANCH_NUM = BRANCH_NUM
 
         # Handle the one exceeption where the branch bends back on itself 
         if self.BUSH_NUM == 9 and self.BRANCH_NUM == 2:
-            segs_mm, RMSE = self.deal_with_branch_9_2(num_segs)
+            segs_mm, RMSE = self.deal_with_branch_9_2(num_segs, disc_type=disc_type)
         else: 
             segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(DATA_DIR, 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'), 
                                                     make_plot=False, strictly_increasing=True, num_segs=num_segs, verbose=True, disc_type=disc_type)
@@ -355,11 +363,25 @@ class BranchSim():
         self.seg_lengths = splineconverter.get_segment_lengths(self.segs_flipped)
         self.seg_angles = splineconverter.get_angles_between_segments(self.segs_flipped)
 
-        slope, measured_centroid = self.create_linearfit_from_diam_data()
-
         # Get the radii at the segment midpoints 
-        self.radii = self.get_rad_at_height(midpoint_zs, slope, measured_centroid, diam_func_factor=diam_func_factor)
-        print("Radii at segment midpoints (m): ", self.radii)
+        if lin_fit == 'height':
+            slope, measured_centroid = self.create_linearfit_from_diam_data()
+            self.radii = self.get_rad_at_height(midpoint_zs, slope, measured_centroid, diam_func_factor=diam_func_factor)
+        elif lin_fit == 'length':
+            print("Using length-based linear fit for diameters.")
+            linfit, _ = self.create_length_linearfit_from_diam_data()
+            print("Length-based linear fit: slope = {:.6f}, intercept = {:.6f}".format(linfit[0], linfit[1]))
+            self.radii = self.get_rads_from_lens(linfit[0], linfit[1], diam_func_factor=diam_func_factor)
+        elif lin_fit == 'length_wcentroid':
+            print("Using length-based linear fit with centroid for diameters.")
+            linfit, centroid = self.create_length_linearfit_from_diam_data()
+            print("Length-based linear fit with centroid: slope = {:.6f}, centroid = {}".format(linfit[0], centroid))
+            self.radii = self.get_rads_from_lens_wcentroid(linfit[0], centroid, diam_func_factor=diam_func_factor)
+        else:
+            raise ValueError("Unknown linear fit type: " + lin_fit)
+        print("Radii at segment midpoints:")
+        for i, radius in enumerate(self.radii):
+            print(f"  seg {i + 1}: {float(radius) * 1000:.3f} mm")
 
         self.build_mjcf_model(flex_modulus=flex_mod)
 
@@ -376,12 +398,61 @@ class BranchSim():
         # This is a linear fit that goes through the centroid but uses the slope from the linear fit
         return diam_linearfit[0], centroid
 
-    def deal_with_branch_9_2(self, num_segs):
+    def create_length_linearfit_from_diam_data(self):
+        # get the diameter data for this bush and branch
+        self.field_measurements = diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
+        # calculate the length of branch it takes to get to the height measurements
+        lengths_to_heights = []
+        for height in self.field_measurements['Height']:
+            total_length = 0
+            last_flag = False
+            for i in range(1, len(self.segs_flipped)):
+                z_end = self.segs_flipped[i][2]
+                length_curr = self.seg_lengths[i-1]
+                # print(f"Segment {i} ends at z = {z_end:.3f} and has length {length_curr:.3f}")
+                if z_end < height/1000 and last_flag == False:  # convert height to meters
+                    # print(f"Segment {i} at height {z_end:.3f} is below target height {height/1000}")
+                    total_length += length_curr
+                    # print(f"Adding segment {i} length {length_curr:.3f} to total length.")
+                elif z_end >= height/1000 and last_flag == False:
+                    # print(f"Segment {i} at height {z_end:.3f} is above target height {height/1000}")
+                    h = height/1000 
+                    z_last = self.segs_flipped[i-1][2]
+                    total_length += length_curr*(h-z_last)/(z_end-z_last)
+                    # print(f"Interpolating segment {i} to height {height/1000}: adding {(h-z_last)/(z_end-z_last)*length_curr:.3f} to total length.")
+                    last_flag = True
+            print(f"Height: {height/1000}, Total length to reach this height: {total_length:3f}")
+            lengths_to_heights.append(total_length)
+        diam_linearfit = np.polyfit(lengths_to_heights, self.field_measurements['Diameter'], 1)
+        centroid = (np.mean(lengths_to_heights), np.mean(self.field_measurements['Diameter']))
+        return diam_linearfit, centroid
+
+    def get_rads_from_lens(self, slope, intercept, diam_func_factor=1):
+        radii = []
+        total_len = 0
+        for this_seg_len in self.seg_lengths:
+            # print(f"Checking segment at length {total_len+this_seg_len/2}")
+            diameter = slope*diam_func_factor*((total_len+this_seg_len/2)) + intercept
+            # print(f"Calculated diameter: {diameter} mm")
+            radii.append(diameter/2/1000) # convert mm to m
+            total_len += this_seg_len
+        return radii
+
+    def get_rads_from_lens_wcentroid(self, slope, pt, diam_func_factor):
+        radii = []
+        total_len = 0
+        for this_seg_len in self.seg_lengths:
+            diameter = slope*diam_func_factor*((total_len+this_seg_len/2)-pt[0]) + pt[1]
+            radii.append(diameter/2/1000) # convert mm to m
+            total_len += this_seg_len
+        return radii
+    
+    def deal_with_branch_9_2(self, num_segs, disc_type='RMSE', ):
         angles_validated = False
         attempt = 1
         while not angles_validated:
             segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(DATA_DIR, 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'),
-                                                make_plot=True, strictly_increasing=False, num_segs=num_segs)
+                                                make_plot=True, strictly_increasing=False, num_segs=num_segs, disc_type=disc_type, deterministic=False)
             segs_flipped = flip_segs_from_curve(segs_mm, print_output=False)
             seg_angles = splineconverter.get_angles_between_segments(segs_flipped) 
             if abs(max(seg_angles.min(), seg_angles.max(), key=abs))<np.pi/2:
@@ -444,16 +515,20 @@ if __name__ == "__main__":
     probe_angle = 0
     diam_func_factor = 1
 
-    segs_list = [4, 6, 8, 10, 12, 14, 16, 18]
+    # segs_list = [4, 6, 8, 10, 12, 14, 16, 18]
+    # segs_list = [4, 10, 18]
 
-    morris_problem = {
-        'num_vars': 4,
-        'names': ['flex_modulus', 'num_segments', 'diam_func_factor', 'probe_angle'],
-        'bounds': [[1.82e9, 8.05e9], 
-        # 'bounds': [[1.68e9, 7.31e9],
-                   [3, 20], 
-                   [0, 1],
-                   [-np.pi/6, np.pi/6]]}
+    diam_func_list = np.linspace(0, 1, num=5)
+    flex_mod_list = np.linspace(1.82e9, 8.05e9, num=5)
+
+    # morris_problem = {
+    #     'num_vars': 4,
+    #     'names': ['flex_modulus', 'num_segments', 'diam_func_factor', 'probe_angle'],
+    #     'bounds': [[1.82e9, 8.05e9], 
+    #     # 'bounds': [[1.68e9, 7.31e9],
+    #                [3, 20], 
+    #                [0, 1],
+    #                [-np.pi/6, np.pi/6]]}
 
     Stiffness_Sis = []
     Error_Sis = []
@@ -464,6 +539,7 @@ if __name__ == "__main__":
         'branch': [],
         'trial': [],
         'flex_modulus': [],
+        'diam_func_factor': [],
         'probe_height': [],
         'field_stiffness': [],
         'sim_stiffness': [],
@@ -473,14 +549,16 @@ if __name__ == "__main__":
 
     # branch in image is branch 3/1/2
 
+    banked_trials = []
+
     for BUSH_NUM in [1, 3, 5, 9, 14, 23]:
-    # for BUSH_NUM in [1,3]:
+    # for BUSH_NUM in [23]:
         print ("----------------------------------------")
         print ("Starting bush number: ", BUSH_NUM)
         print ("----------------------------------------")
 
         for BRANCH_NUM in [1, 2, 3]:
-        # for BRANCH_NUM in [1]:
+        # for BRANCH_NUM in [2]:
             print ("----------------------------------------")
             print ("Starting bush :", BUSH_NUM, " branch: ", BRANCH_NUM)
             print ("----------------------------------------")
@@ -496,7 +574,36 @@ if __name__ == "__main__":
                         print("Excluding trial 14/3/1 because camera data did not capture push point")
                         continue
 
-              
+                # Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, diam_func_factor=1, disc_type='min_dist', lin_fit='length')
+                ctr = 0
+                # ------------- Naive method ----------------
+                for test_mod in flex_mod_list:
+                    for diam_func_factor in diam_func_list:
+                        print("------------------------------")
+                        print("-------Testing with flex_mod:", test_mod, "diam_func_factor:", diam_func_factor, "--------")
+                        print(f"On combo # {ctr} for Bush {BUSH_NUM}, Branch {BRANCH_NUM}, Trial {TRIAL_NUM}")
+                        print("------------------------------")
+                        Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, diam_func_factor=diam_func_factor, disc_type='min_dist', lin_fit='length')
+                        try:
+                            Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle, error_model='SMAPE')
+                            error = Trial.stiffness_error
+                        except:
+                            print("===== Branch simulation failed. Skipping! =======")
+                            error = np.nan
+                            banked_trials.append((test_mod, diam_func_factor, BUSH_NUM, BRANCH_NUM, TRIAL_NUM))
+                            continue
+                        ctr += 1
+
+                # ------------- iterate over number of segments ----------------
+                # for num_segs in segs_list:
+                #     Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=1, disc_type='num_segs')
+                #     try:
+                #         Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle, error_model='SMAPE')
+                #         error = Trial.stiffness_error
+                #     except:
+                #         print("===== Simulation failed. Skipping! =======")
+                #         error = np.nan
+
                 # ------------- save images for the pipeline picture ----------------
                 # Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=diam_func_factor, disc_type='RMSE')
                 # Branch.save_mujoco_render(suffix='_before_trial')
@@ -508,87 +615,93 @@ if __name__ == "__main__":
                 # Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle, error_model='SMAPE')
 
                 # ----------------- run a simulation and save the data -----------------
-                    # metadata['sim_idx'].append(total_sim_idx)
-                    # metadata['bush'].append(BUSH_NUM)
-                    # metadata['branch'].append(BRANCH_NUM)
-                    # metadata['trial'].append(TRIAL_NUM)
-                    # metadata['flex_modulus'].append(test_mod)
-                    # metadata['probe_height'].append(Trial.PROBE_HEIGHT)
-                    # metadata['field_stiffness'].append(Trial.fd_linearfit[0])
-                    # metadata['sim_stiffness'].append(Trial.sim_fd_linearfit[0])
-                    # metadata['num_links'].append(len(Branch.segs_flipped)-1)
-                    # metadata['error'].append(error)
-                    # total_sim_idx += 1
+                        if RECORDING_DATA:
+                            metadata['sim_idx'].append(total_sim_idx)
+                            metadata['bush'].append(BUSH_NUM)
+                            metadata['branch'].append(BRANCH_NUM)
+                            metadata['trial'].append(TRIAL_NUM)
+                            metadata['flex_modulus'].append(test_mod)
+                            metadata['diam_func_factor'].append(diam_func_factor)
+                            metadata['probe_height'].append(Trial.PROBE_HEIGHT)
+                            metadata['field_stiffness'].append(Trial.fd_linearfit[0])
+                            metadata['sim_stiffness'].append(Trial.sim_fd_linearfit[0])
+                            metadata['num_links'].append(len(Branch.segs_flipped)-1)
+                            metadata['error'].append(Trial.stiffness_error)
+                            total_sim_idx += 1
 
-                    # trial_key = f"bush{BUSH_NUM}_branch{BRANCH_NUM}_trial{TRIAL_NUM}"
-                    # with open(os.path.join(results_folder, 'metadata.pkl'), 'wb') as f:
-                    #     pickle.dump(metadata, f)
+                            trial_key = f"bush{BUSH_NUM}_branch{BRANCH_NUM}_trial{TRIAL_NUM}"
+                            with open(os.path.join(results_folder, 'metadata.pkl'), 'wb') as f:
+                                pickle.dump(metadata, f)
 
                             
                 # --------------------- method of morris study ---------------------
-                samples = morris_sample(morris_problem, N=500, num_levels=6, optimal_trajectories=4)
-                output_stiffnesses = np.zeros(samples.shape[0])
-                output_errors = np.zeros(samples.shape[0])
+                # samples = morris_sample(morris_problem, N=500, num_levels=6, optimal_trajectories=4)
+                # output_stiffnesses = np.zeros(samples.shape[0])
+                # output_errors = np.zeros(samples.shape[0])
 
-                for i, x in enumerate(samples):
-                    test_mod = x[0]
-                    num_segs = int(x[1])
-                    diam_func_factor = x[2]
-                    probe_angle = x[3]
-                    print ("----------------------------------------")
-                    print(f"On Bush {BUSH_NUM} Branch {BRANCH_NUM} Trial {TRIAL_NUM}")
-                    print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad, diam_func_factor: {diam_func_factor:.3f}")
-                    print ("----------------------------------------")
+                # for i, x in enumerate(samples):
+                #     plt.close('all')
+                #     test_mod = x[0]
+                #     num_segs = int(x[1])
+                #     diam_func_factor = x[2]
+                #     probe_angle = x[3]
+                #     print ("----------------------------------------")
+                #     print(f"On Bush {BUSH_NUM} Branch {BRANCH_NUM} Trial {TRIAL_NUM}")
+                #     print (f"Starting Morris method {i} of {len(samples)} using flex modulus: {test_mod:.2e}, num_segs: {num_segs}, probe_angle: {probe_angle:.3f} rad, diam_func_factor: {diam_func_factor:.3f}")
+                #     print ("----------------------------------------")
                         
-                    try:
-                        Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, num_segs=num_segs, diam_func_factor=diam_func_factor)
-                        Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle, error_model='SMAPE')
-                        output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
-                        output_errors[i] = Trial.stiffness_error
-                    except Exception as e:
-                        print(f"Sample {i} failed: {e}. Will fill with mean after loop.")
-                        output_stiffnesses[i] = np.nan
-                        output_errors[i] = np.nan   
+                #     try:
+                #         Branch = BranchSim(BUSH_NUM, BRANCH_NUM, flex_mod=test_mod, diam_func_factor=diam_func_factor, num_segs=num_segs, disc_type='num_segs', lin_fit='length_wcentroid')
+                #         Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle, error_model='SMAPE')
+                #         print("----DIAGNOSTICS----")
+                #         print(f"Diam factor: {diam_func_factor}, effective stiff: {Branch.editor.k_eq}, lin fit slope: {Trial.sim_fd_linearfit[0]}")
+                #         output_stiffnesses[i] = Trial.sim_fd_linearfit[0]
+                #         output_errors[i] = Trial.stiffness_error
+                #     except Exception as e:
+                #         print(f"Sample {i} failed: {e}. Will fill with mean after loop.")
+                #         output_stiffnesses[i] = np.nan
+                #         output_errors[i] = np.nan   
+                #         banked_trials.append((BUSH_NUM, BRANCH_NUM, TRIAL_NUM))
 
-                # Replace failed samples with the mean of successful ones
-                output_stiffnesses = np.where(np.isnan(output_stiffnesses), np.nanmean(output_stiffnesses), output_stiffnesses)
-                output_errors = np.where(np.isnan(output_errors), np.nanmean(output_errors), output_errors)
+                # # Replace failed samples with the mean of successful ones
+                # output_stiffnesses = np.where(np.isnan(output_stiffnesses), np.nanmean(output_stiffnesses), output_stiffnesses)
+                # output_errors = np.where(np.isnan(output_errors), np.nanmean(output_errors), output_errors)
 
-                Si = morris_analyze(morris_problem, samples, output_stiffnesses, scaled=True, print_to_console=True)
-                Stiffness_Sis.append(Si)
+                # Si = morris_analyze(morris_problem, samples, output_stiffnesses, scaled=True, print_to_console=True)
+                # Stiffness_Sis.append(Si)
 
-                Ei = morris_analyze(morris_problem, samples, output_errors, print_to_console=True)
-                Error_Sis.append(Ei)
+                # Ei = morris_analyze(morris_problem, samples, output_errors, print_to_console=True)
+                # Error_Sis.append(Ei)
 
-                all_trial_data.append({
-                'problem': morris_problem,
-                'samples': samples,
-                'output_stiffnesses': output_stiffnesses,
-                'output_errors': output_errors,
-                'stiffness_Si': Si,
-                'stiffness_Si_df': Si.to_df(),
-                'error_Si': Ei,
-                'error_Si_df': Ei.to_df(),
-                'bush': BUSH_NUM,
-                'branch': BRANCH_NUM,
-                'trial': TRIAL_NUM,
-                })
-                # pickle Stiffness_Sis and Error_Sis to results folder
-                with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
-                    pickle.dump(Stiffness_Sis, f)
-                with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
-                    pickle.dump(Error_Sis, f)
-                with open(os.path.join(results_folder, 'all_trial_data.pkl'), 'wb') as f:
-                    pickle.dump(all_trial_data, f)
-
-    # pickle Stiffness_Sis and Error_Sis to results folder
-    with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
-        pickle.dump(Stiffness_Sis, f)
-    with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
-        pickle.dump(Error_Sis, f)
-    with open(os.path.join(results_folder, 'all_trial_data.pkl'), 'wb') as f:
-        pickle.dump(all_trial_data, f)
-    with open(os.path.join(results_folder, 'metadata.pkl'), 'wb') as f:
-        pickle.dump(metadata, f)
-
+                # all_trial_data.append({
+                # 'problem': morris_problem,
+                # 'samples': samples,
+                # 'output_stiffnesses': output_stiffnesses,
+                # 'output_errors': output_errors,
+                # 'stiffness_Si': Si,
+                # 'stiffness_Si_df': Si.to_df(),
+                # 'error_Si': Ei,
+                # 'error_Si_df': Ei.to_df(),
+                # 'bush': BUSH_NUM,
+                # 'branch': BRANCH_NUM,
+                # 'trial': TRIAL_NUM,
+                # })
+                # # pickle Stiffness_Sis and Error_Sis to results folder
+                # with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
+                #     pickle.dump(Stiffness_Sis, f)
+                # with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
+                #     pickle.dump(Error_Sis, f)
+                # with open(os.path.join(results_folder, 'all_trial_data.pkl'), 'wb') as f:
+                #     pickle.dump(all_trial_data, f)
+                
+    # # pickle Stiffness_Sis and Error_Sis to results folder
+    # with open(os.path.join(results_folder, 'Stiffness_Sis.pkl'), 'wb') as f:
+    #     pickle.dump(Stiffness_Sis, f)
+    # with open(os.path.join(results_folder, 'Error_Sis.pkl'), 'wb') as f:
+    #     pickle.dump(Error_Sis, f)
+    # with open(os.path.join(results_folder, 'all_trial_data.pkl'), 'wb') as f:
+    #     pickle.dump(all_trial_data, f)
+    # with open(os.path.join(results_folder, 'metadata.pkl'), 'wb') as f:
+    #     pickle.dump(metadata, f)
+    print("Banked trials (skipped due to errors): ", banked_trials)
     

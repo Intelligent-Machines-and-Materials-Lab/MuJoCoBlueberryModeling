@@ -177,7 +177,7 @@ def get_angles_between_segments(segments):
 
     return angles
 
-def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8, verbose=False, disc_type='RMSE'):
+def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8, verbose=False, disc_type='RMSE', deterministic=True):
     # load txt file
     curve_df = pd.read_csv(filepath, delimiter=' ', header=None)
     curve = curve_df.to_numpy()
@@ -187,11 +187,13 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
     if verbose:
         print(f"Initial segment endpoints:\n{segs}")
 
-    # set up judgement curve as 20 evenly spaced points along the original curve, excluding the endpoints
-    judgement_pts = np.linspace(0, curve.shape[0]-1, 22, dtype=int)[1:-2]
+    # set up judgement curve as 50 evenly spaced points along the original curve, excluding the endpoints
+    judgement_pts = np.linspace(0, curve.shape[0]-1, 52, dtype=int)[1:-2]
     judgement_curve = curve[judgement_pts]
 
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    max_dist = np.max(get_distances_between_curve_and_segments(judgement_curve, segs))
+    
     if verbose:
         print(f"Initial RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
 
@@ -199,11 +201,15 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
     i = 1
     if disc_type == 'RMSE':
         while RMSE > 5:
-            segs, RMSE = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose)
+            segs, RMSE, _ = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose, deterministic=deterministic)
             i += 1
     elif disc_type == 'num_segs':
         while len(segs) < num_segs + 1:
-            segs, RMSE = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose)
+            segs, RMSE, _ = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose, deterministic=deterministic)
+            i += 1
+    if disc_type == 'min_dist':
+        while max_dist > 5:
+            segs, RMSE, max_dist = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose, deterministic=deterministic)
             i += 1
         
     if verbose:
@@ -227,14 +233,20 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasi
     # print(f"Final segment endpoints:\n{segs}")
     return segs, RMSE
 
-def run_segmentation(curve, judgement_curve, segs, strictly_increasing=True, verbose=False):
-    random_points = np.random.randint(0, curve.shape[0], 20)
-    random_curve = curve[random_points]
-    random_dists = get_distances_between_curve_and_segments(random_curve, segs)
+def run_segmentation(curve, judgement_curve, segs, strictly_increasing=True, verbose=False, deterministic=True):
+    if deterministic:
+        # get evenly spaced points along the curve to check distances against the segments
+        check_pts = np.linspace(0, curve.shape[0] - 1, 100, dtype=int)
+    else:
+        # original method: get random points along the curve to check distances against the segments
+        check_pts = np.random.randint(0, curve.shape[0], 20)
 
-    furthest_idx = np.argmax(random_dists)
-    new_point = random_curve[furthest_idx]
-    # print(f"Largest distances from random points to segments: {np.max(random_dists):.3f} at {random_curve[np.argmax(random_dists)]}")
+    check_curve = curve[check_pts]
+    check_dists = get_distances_between_curve_and_segments(check_curve, segs)
+
+    furthest_idx = np.argmax(check_dists)
+    new_point = check_curve[furthest_idx]
+    # print(f"Largest distances from random points to segments: {np.max(check_dists):.3f} at {check_curve[np.argmax(check_dists)]}")
 
     if strictly_increasing:
         # insert new point into segs based on y-value
@@ -257,7 +269,10 @@ def run_segmentation(curve, judgement_curve, segs, strictly_increasing=True, ver
     # print(f"Segment endpoints after iteration {i}:\n{segs}")
 
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    return segs, RMSE
+    check_dists = get_distances_between_curve_and_segments(check_curve, segs)
+    furthest_dist = np.max(check_dists)
+    return segs, RMSE, furthest_dist
+
 
 def plot_obj_file(filepath):
     obj_spline = load_obj_spline(filepath)
