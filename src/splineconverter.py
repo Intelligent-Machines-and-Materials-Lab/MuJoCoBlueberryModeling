@@ -11,6 +11,7 @@ from pytransform3d.transform_manager import TransformManager
 import json
 import bisect
 import pandas as pd
+from itertools import pairwise
 
 np.set_printoptions(precision=3, suppress=True, linewidth=100)
 
@@ -176,46 +177,44 @@ def get_angles_between_segments(segments):
 
     return angles
 
-def segment_curve_from_cloudcompare(filepath, make_plot=False):
+def segment_curve_from_cloudcompare(filepath, make_plot=False, strictly_increasing=True, num_segs=8, verbose=False, disc_type='RMSE', deterministic=True):
     # load txt file
     curve_df = pd.read_csv(filepath, delimiter=' ', header=None)
     curve = curve_df.to_numpy()
-
+    
     #initialize segs as an ndarray of the first and last points of the obj_spline
     segs = np.array([curve[0,:], curve[-1,:]])
-    print(f"Initial segment endpoints:\n{segs}")
+    if verbose:
+        print(f"Initial segment endpoints:\n{segs}")
 
-    # set up judgement curve as 20 evenly spaced points along the original curve, excluding the endpoints
-    judgement_pts = np.linspace(0, curve.shape[0]-1, 22, dtype=int)[1:-2]
+    # set up judgement curve as 50 evenly spaced points along the original curve, excluding the endpoints
+    judgement_pts = np.linspace(0, curve.shape[0]-1, 52, dtype=int)[1:-2]
     judgement_curve = curve[judgement_pts]
 
     RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
-    print(f"RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
-
-    # iterate until MSE is below 5mm or we have 12 segments
-    i = 1
-    # RMSE > 5
-    while len(segs) < 13:
-        random_points = np.random.randint(0, curve.shape[0], 20)
-        random_curve = curve[random_points]
-        random_dists = get_distances_between_curve_and_segments(random_curve, segs)
-
-        furthest_idx = np.argmax(random_dists)
-        new_point = random_curve[furthest_idx]
-        # print(f"Largest distances from random points to segments: {np.max(random_dists):.3f} at {random_curve[np.argmax(random_dists)]}")
-
-        # insert new point into segs
-        existing_yvals= segs[:,1]
-        idx = bisect.bisect_right(existing_yvals, new_point[1])
-        segs = np.insert(segs, idx, new_point, axis=0)
-        # print(f"Segment endpoints after iteration {i}:\n{segs}")
-        i += 1
-
-        RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    max_dist = np.max(get_distances_between_curve_and_segments(judgement_curve, segs))
     
-    print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
-    #     
+    if verbose:
+        print(f"Initial RMSE between the B-spline curve and the baseline segments before segmenting: {RMSE:.3f}")
 
+    # iterate until MSE is below 5mm or we have the designated # of segments
+    i = 1
+    if disc_type == 'RMSE':
+        while RMSE > 5:
+            segs, RMSE, _ = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose, deterministic=deterministic)
+            i += 1
+    elif disc_type == 'num_segs':
+        while len(segs) < num_segs + 1:
+            segs, RMSE, _ = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose, deterministic=deterministic)
+            i += 1
+    if disc_type == 'min_dist':
+        while max_dist > 5:
+            segs, RMSE, max_dist = run_segmentation(curve, judgement_curve, segs, strictly_increasing=strictly_increasing, verbose=verbose, deterministic=deterministic)
+            i += 1
+        
+    if verbose:
+        print(f"RMSE between the discretized segments and the curve after segmenting: {RMSE:.3f}")
+        
     if make_plot:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
@@ -233,6 +232,47 @@ def segment_curve_from_cloudcompare(filepath, make_plot=False):
     # print(f"Final RMSE between the B-spline curve and the baseline segments: {RMSE:.3f}")
     # print(f"Final segment endpoints:\n{segs}")
     return segs, RMSE
+
+def run_segmentation(curve, judgement_curve, segs, strictly_increasing=True, verbose=False, deterministic=True):
+    if deterministic:
+        # get evenly spaced points along the curve to check distances against the segments
+        check_pts = np.linspace(0, curve.shape[0] - 1, 100, dtype=int)
+    else:
+        # original method: get random points along the curve to check distances against the segments
+        check_pts = np.random.randint(0, curve.shape[0], 20)
+
+    check_curve = curve[check_pts]
+    check_dists = get_distances_between_curve_and_segments(check_curve, segs)
+
+    furthest_idx = np.argmax(check_dists)
+    new_point = check_curve[furthest_idx]
+    # print(f"Largest distances from random points to segments: {np.max(check_dists):.3f} at {check_curve[np.argmax(check_dists)]}")
+
+    if strictly_increasing:
+        # insert new point into segs based on y-value
+        existing_yvals= segs[:,1]
+        idx = bisect.bisect_right(existing_yvals, new_point[1])
+        segs = np.insert(segs, idx, new_point, axis=0)
+    else:
+        # This just exists for 9-1-1 that needs to be built differently. 
+        # Don't use it on branches that bend a lot. Seriously. 
+        # get norm distance between new point and all points in segs
+        furthest_distances = np.linalg.norm(segs - new_point, axis=1)
+        if verbose:
+            print(f"Segment endpoints before this iteration:\n{segs}")
+            print(f"New point to be inserted: {new_point}")
+            print(f"Distances from new point to all segment endpoints: {furthest_distances}")
+            print(f"indices of closest two segment endpoints to new point: {np.argsort(furthest_distances)[:2]}")
+            print(f"Insert index for new point: {np.max(np.argsort(furthest_distances)[:2])}")
+        idx = np.max(np.argsort(furthest_distances)[:2])
+        segs = np.insert(segs, idx, new_point, axis=0)
+    # print(f"Segment endpoints after iteration {i}:\n{segs}")
+
+    RMSE = get_rmse_between_curve_and_segments(judgement_curve, segs)
+    check_dists = get_distances_between_curve_and_segments(check_curve, segs)
+    furthest_dist = np.max(check_dists)
+    return segs, RMSE, furthest_dist
+
 
 def plot_obj_file(filepath):
     obj_spline = load_obj_spline(filepath)

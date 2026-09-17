@@ -9,15 +9,21 @@ build_branch
 """
 
 
+from xml.parsers.expat import model
+
 import mujoco
 import numpy as np
 import mediapy as media
+import matplotlib.pyplot as plt
 import pygments
 print_style = 'lovelace'
 from IPython.display import HTML, display
 from scipy.spatial.transform import Rotation as R 
 
 BROWN = np.array([0.4, 0.24, 0.0, 1])
+POLYLINE_GOLD = np.array([220/255, 159/255, 85/255, 1])
+DISCRETIZED_GREEN = np.array([161/255, 142/255, 56/255, 1])
+LOAD_SITE_GREEN = np.array([98/255, 113/255, 76/255, 1])
 
 class CaneEditor():
     def __init__(self, xml_name, flex_mod = 4.9e9):
@@ -43,7 +49,15 @@ class CaneEditor():
         self.spec.default.site.size = np.array([0.01, 0.01, 0.01])
         self.spec.default.site.rgba = np.array([0, 0, 0, 1])
 
-    def build_branch_from_lengths(self, lengths, radii, def_stiff=295, verbose=False):
+    def build_branch_from_lengths(self, lengths, radii, angles_x=None, angles_y=None, def_stiff=295, verbose=False):
+        """
+        Procedurally builds the MJDF with the specified segment lengths and radii. Assumes no branching. 
+        Calculates bending stiffnes based on beam bending theory and sets the joint stiffness accordingly.
+        lengths: list of segment length in meters
+        radii: list of segment radius in meters (assumes circular cross-section)
+        angles_x: list of x-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
+        angles_y: list of y-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
+        """
         self.num_segments = len(lengths)
         self.spec.default.joint.stiffness = def_stiff
         self.total_length = sum(lengths)
@@ -77,21 +91,21 @@ class CaneEditor():
             rgba[3] = 1
             brown_variant = (rgba + BROWN*2) / 3
 
+            # Bake bend angles into body frame so qpos=0 is the natural shape (no springref torque at rest)
+            euler_x_deg = np.degrees(angles_x[i]) if angles_x is not None else 0.0
+            euler_y_deg = np.degrees(angles_y[i]) if angles_y is not None else 0.0
+
             # add child body to parent
             if parent_body == base_body:
                 # start the first segment at the base
-                child_body = parent_body.add_body(name=body_name, 
-                                              pos=[0,0,0])
-                # print(f"Adding body: {child_body.name} at position: {child_body.pos}")
+                child_body = parent_body.add_body(name=body_name, pos=[0,0,0])
             else:
                 # start the subsequent segments at the end of the previous segment
-                child_body = parent_body.add_body(name=body_name, 
-                                                  pos=[0,0,lengths[i-1]])
-                # print(f"Adding body: {child_body.name} at position: {child_body.pos}")
-            # print(f"Adding body: {child_body.name} at position: {child_body.pos}")
-            # add hinge to child body
+                child_body = parent_body.add_body(name=body_name, pos=[0,0,lengths[i-1]])
+            xyzw = R.from_euler('xyz', [euler_x_deg, euler_y_deg, 0.0], degrees=True).as_quat()
+            child_body.quat = [xyzw[3], xyzw[0], xyzw[1], xyzw[2]]  # MuJoCo uses [w, x, y, z]
             second_moment_area = (np.pi/4) * (radii[i]**4)
-            k = 3*self.E*second_moment_area / seg_length
+            k = 2*self.E*second_moment_area / seg_length
             self.inverted_k_list.append(1/k)
             if verbose:
                 print(f"Estimated bending stiffness k via beam bending: {k:.1f} Nm/rad")
@@ -103,7 +117,8 @@ class CaneEditor():
                                  pos=[0, 0, seg_length/2], 
                                  type=mujoco.mjtGeom.mjGEOM_BOX,
                                  size=[radii[i], radii[i], seg_length/2],
-                                 rgba=brown_variant)
+                                #  rgba=brown_variant)
+                                 rgba=DISCRETIZED_GREEN)
             parent_body = child_body
 
         self.model = self.spec.compile()
@@ -187,9 +202,10 @@ class CaneEditor():
             I = self.model.body_inertia[3*b:3*b+3]
             print(f"  body {b} ({self.model.body(b).name}): {I}")
 
-    def offset_joint_by_name(self, joint_name, angle):
+    def offset_joint_by_name(self, joint_name, angle, compile=True):
         """
         Offsets the joint angle of a specified joint by a given angle.
+        Note: this also sets the reference position for the angle. 
         """
         joints = self.spec.worldbody.find_all("joint")
         found = False
@@ -200,8 +216,8 @@ class CaneEditor():
                 break
         if not found:
             raise ValueError(f"Joint '{joint_name}' not found.")
-        # compile the model again to apply changes
-        self.model = self.spec.compile()
+        if compile:
+            self.model = self.spec.compile()
 
     def offset_joint_by_dir_and_number(self, joint_dir, joint_number, angle):
         """
@@ -219,7 +235,7 @@ class CaneEditor():
         joint_name = f"branch_joint_{joint_dir}{joint_number}"
         self.offset_joint_by_name(joint_name, angle)
 
-    def offset_all_joints_in_direction(self,  direction, angles):
+    def offset_all_joints_in_direction(self, direction, angles):
         """
         Offsets all joints by the specified angles.
         angles: list of angles to offset each joint
@@ -229,8 +245,8 @@ class CaneEditor():
         if self.num_segments == len(angles):
             for i, angle in enumerate(angles):
                 joint_name = f"branch_joint_{direction}{i}"
-                self.offset_joint_by_name(joint_name, angle)
-            
+                self.offset_joint_by_name(joint_name, angle, compile=False)
+            # Compile once after all springrefs are set
             self.model = self.spec.compile()
         else:
             raise ValueError("Number of angles must match the number of x joints.")
@@ -259,16 +275,21 @@ class CaneEditor():
                 data.qpos[joint.id] = joint.springref
         return data.qpos
     
-    def redefine_probe(self, probe_height, model_pos, verbose=False):
-        """ 
-        Identify the last site before the specified probe height.
-        Adds a new site at the probe height along the branch body after that site. 
-        Redefines the probe position to be a little to the left of the new site. 
+    def define_probe_site(self, probe_height, model_pos, verbose=False):
         """
-
+        Identify the last site before the specified probe height.
+        Adds a new site at the probe height along the branch body after that site."""
         # raise a value error if probe height is above the total length of the branch
         if probe_height > self.total_length:
-            raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
+            print(f"Probe height {probe_height:.3f} m is above total length of branch {self.total_length:.3f} m. Check heights.")
+            # raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
+
+        # Remove existing probe_contact_site if it already exists
+        for body in self.spec.bodies:
+            for site in body.find_all("site"):
+                if site.name == "probe_contact_site":
+                    site.delete()
+                    break
 
         # set up the model to and data to be bent (probably)
         self.model = self.spec.compile()
@@ -284,7 +305,8 @@ class CaneEditor():
                 # print(f"Site {i} is below probe height: {site_xpos[2]} < {probe_height}")
                 last_site_i = i
 
-        print(f"Last site before probe height is {last_site_i} with position {data.site_xpos[last_site_i]}")
+        if verbose:
+            print(f"Last site before probe height is {last_site_i} with position {data.site_xpos[last_site_i]}")
 
         # get information about the last site
         name = self.model.site(last_site_i).name
@@ -293,6 +315,10 @@ class CaneEditor():
         site_xpos = data.site_xpos[last_site_i]
         rotmat = data.xmat[body_id].reshape(3, 3)
         euler = R.from_matrix(rotmat).as_euler('xyz', degrees=False)
+        branch_axis_world = rotmat[:,2]  # z-axis of the body frame in world coordinates
+        angle_from_yz_plane = np.arcsin(branch_axis_world[0])  # angle from the yz-plane (x=0 plane)
+        self.init_probe_angle = angle_from_yz_plane
+        print(f"probed branch is at angle {np.degrees(angle_from_yz_plane):.2f} degrees from vertical plane (yz-plane)")
 
         if verbose:
             print("Last site before probe height:")
@@ -306,22 +332,33 @@ class CaneEditor():
         z_remainder = probe_height - site_xpos[2]
         hyp1 = z_remainder / np.cos(euler[0])
         hyp2 = hyp1 / np.cos(euler[1])
-        print(f"distance along branch to probe site: {hyp2:.3f} m")
+        if verbose:
+            print(f"distance along branch to probe site: {hyp2:.3f} m")
+
         for body in self.spec.bodies:
             if body.name == body_name:
                 geoms = body.find_all("geom")
                 if geoms:
-                    contact_branch_radius = geoms[0].size[0]  # Assuming the first geom is the branch
+                    self.probe_contact_branch_radius = geoms[0].size[0]  # Assuming the first geom is the branch
                     contact_branch_length = geoms[0].size[2]
                     if hyp2 < contact_branch_length*2:
                         body.add_site(name="probe_contact_site",
                               pos=[0, 0, hyp2],
-                              rgba=[1, 0, 0, 1])
+                              rgba=LOAD_SITE_GREEN)
+                        if verbose:
+                            print(f"Added probe contact site to body {body_name} at local position [0, 0, {hyp2:.3f}]")
                     else:
                         raise ValueError("Probe position exceeds segment length in bent position. Please set a lower probe height.")
                 else:
                     raise ValueError(f"No geoms found in body {body_name}. Check XML definition.")
                 break
+        self.model = self.spec.compile()
+
+    
+    def move_probe_to_site(self, probe_height, model_pos, verbose=False):
+        """ 
+        Redefines the probe position to be a little to the left of the new site. 
+        """
         
         self.model = self.spec.compile()
         data = mujoco.MjData(self.model)
@@ -331,7 +368,7 @@ class CaneEditor():
         site_id = self.model.site("probe_contact_site").id
         new_site_xpos = data.site_xpos[site_id]
         
-        init_probe_x = new_site_xpos[0] - 0.056 - contact_branch_radius # offset to the left of the site
+        init_probe_x = new_site_xpos[0] - 0.056 - self.probe_contact_branch_radius # offset to the left of the site
         for body in self.spec.bodies: 
             if body.name == "probe_link":
                 body.pos = [init_probe_x, new_site_xpos[1], probe_height]
@@ -351,13 +388,32 @@ class CaneEditor():
             # print(f"Default camera position: {cam.pos}")
             media.show_image(renderer.render())
 
+    def show_model_at_pos_script(self, pos):
+        """
+        Displays the model at the given position using matplotlib.
+        Use this instead of show_model_at_pos() when running in a normal Python script.
+        """
+        data = mujoco.MjData(self.model)
+        data.qpos[:] = pos
+        with mujoco.Renderer(self.model, height=480, width=640) as renderer:
+            mujoco.mj_forward(self.model, data)
+            renderer.update_scene(data)
+            img = renderer.render()
+        plt.close('all')
+        fig, ax = plt.subplots()
+        ax.imshow(img)
+        ax.axis('off')
+        fig.tight_layout()
+        plt.show()
+
     def save_picture_of_model(self, pos, filename):
         """
         Saves an image of the model at the given position to filename
         """
         data = mujoco.MjData(self.model)
         data.qpos[:] = pos  
-        with mujoco.Renderer(self.model, height=480, width=640) as renderer:
+        self.model.vis.quality.offsamples = 8
+        with mujoco.Renderer(self.model, height=1080, width=1920) as renderer:
             mujoco.mj_forward(self.model, data)
             renderer.update_scene(data)
             media.write_image(filename, renderer.render(), fmt='pdf')

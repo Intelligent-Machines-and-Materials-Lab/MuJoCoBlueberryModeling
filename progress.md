@@ -12,6 +12,17 @@ These are Hannah's running notes about what's going on in development. It's not 
 | Colorblind friendly colormaps |  [Info PDF](https://www.fabiocrameri.ch/ws/media-library/ce2eb6eee7c345f999e61c02e2733962/readme_scientificcolourmaps.pdf) |
 
 ## Running Log
+6/26/26
+
+Implemented a, uh, gaussian process change detector? It uses a Gaussian kernel to detect changes in the noise distribution of a signal. More info here: [Normal Cost](https://centre-borelli.github.io/ruptures-docs/user-guide/costs/costnormal/) and here: [BottomUp Search](https://centre-borelli.github.io/ruptures-docs/user-guide/detection/bottomup/). PELT also works pretty well -- it has a slow Python implementation that just works on detecting changes in Gaussian distributions specifically. This kernel thing is a little better at detecting overall distribution changes (changes to the shape too) and it doesn't have the nice fast C implementation. The penalty value I guessed empirically by making sure the no-contact trials weren't setting it off. The paper "Selective review of offline change point detection methods" is good reading about the different search tools and segmentation methods for this. 
+
+6/25/26 
+
+We're BACK!!!!
+
+What we learned today:
+- In general, \accel0 was attached to branch_1, \accel1 was attached to branch_2, and \accel2 was attached to branch_3. HOWEVER, this was not the case for ONLY BUSH 2(Hooray). In this case, \accel0 and \accel2 were reversed for some reason I could not tell you. 
+- I added in the `imu_used_by_trial_number' list to identify this information, and trial_data["imu_used"] can be called to identify this information in the dictionary as well. Sigh. 
 
 2/20/26
 
