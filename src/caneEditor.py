@@ -26,7 +26,7 @@ DISCRETIZED_GREEN = np.array([161/255, 142/255, 56/255, 1])
 LOAD_SITE_GREEN = np.array([98/255, 113/255, 76/255, 1])
 
 class CaneEditor():
-    def __init__(self, xml_name, flex_mod = 4.9e9):
+    def __init__(self, xml_name, flex_mod = 4.67e9):
         self.spec = mujoco.MjSpec.from_string(xml_name)
         self.E = flex_mod  # Flexural modulus from average of 6 tested canes
 
@@ -65,15 +65,16 @@ class CaneEditor():
         self.inverted_k_list = []
 
         # find the base body
-        base_body = None
+        world_body = None
         for body in self.spec.bodies:
-            if body.name == "branch_base":
-                base_body = body
+            # print(f"Checking body: {body.name}")
+            if body.name == "world":
+                world_body = body
                 break
-        if base_body is None:
-            raise ValueError("Branch base body not found in the model.")
+        if world_body is None:
+            raise ValueError("World body not found in the model. (How did that happen???? Is this an empty XML file? Just covering our bases I guess...)")
 
-        parent_body = base_body
+        parent_body = world_body
         for i in range(self.num_segments):
             if verbose:
                 print(f"Constructing segment {i} with length {lengths[i]:.3f} m")
@@ -96,7 +97,7 @@ class CaneEditor():
             euler_y_deg = np.degrees(angles_y[i]) if angles_y is not None else 0.0
 
             # add child body to parent
-            if parent_body == base_body:
+            if parent_body == world_body:
                 # start the first segment at the base
                 child_body = parent_body.add_body(name=body_name, pos=[0,0,0])
             else:

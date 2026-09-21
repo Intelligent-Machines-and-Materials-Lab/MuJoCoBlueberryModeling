@@ -1,0 +1,26 @@
+<mujoco model="n_joint_branch">
+  <option gravity="0 0 -10"/>
+  <option integrator="RK4"/>
+  <compiler angle="radian"/>
+  <compiler inertiafromgeom="auto"/>
+  <statistic center="0 0 0.35" />
+
+  <visual>
+    <headlight diffuse=".9 .9 .9" specular=".75 .75 .75"/>
+    <global orthographic="false" fovy="45" elevation="-15" offwidth="1920" offheight="1080"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1=".86 .89 .91"  rgb2=".86 .89 .91" width="5" height="2"/>
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="1 1 1" rgb2="1 1 1" markrgb="0 0 0" width="300" height="300"/>
+    <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.01"/>
+  </asset>
+
+  <worldbody>
+    <camera name="x_cam" pos="1.23 -.034 0.68" xyaxes="0 1 0 -.25 0 1"/>
+    <geom name="floor" size="0.25 0.25 0.01" type="plane" material="groundplane"/>
+    <light pos="1 0 2" diffuse=".9 .9 .9" specular=".6 .6 .6" castshadow="false" dir="-1 0 -2"/>
+    
+  </worldbody>
+
+</mujoco>
