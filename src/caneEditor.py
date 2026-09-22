@@ -28,7 +28,7 @@ LOAD_SITE_GREEN = np.array([98/255, 113/255, 76/255, 1])
 class CaneEditor():
     def __init__(self, xml_name, flex_mod = 4.67e9):
         self.spec = mujoco.MjSpec.from_string(xml_name)
-        self.E = flex_mod  # Flexural modulus from average of 6 tested canes
+        self.E = flex_mod  # Flexural modulus from average of dormant season canes
 
         # default geom properties for wood branch
         self.spec.default.geom.density = 580 # kg/m^3 from Zhang
@@ -49,7 +49,17 @@ class CaneEditor():
         self.spec.default.site.size = np.array([0.01, 0.01, 0.01])
         self.spec.default.site.rgba = np.array([0, 0, 0, 1])
 
-    def build_branch_from_lengths(self, lengths, radii, angles_x=None, angles_y=None, def_stiff=295, verbose=False):
+        self.num_canes = 0
+        self.cane_ids = []
+        self.num_segments = {}  # key: cane_id, value: number of segments for that cane
+        self.total_length = {}  # key: cane_id, value: total length of that cane
+
+    def add_branch_to_editor(self, branch_id):
+        # Establishes the ID for a new branch in the editor/model
+        self.cane_ids.append(branch_id)
+        self.num_canes += 1
+
+    def build_branch_from_lengths(self, lengths, radii, branch_id="only", angles_x=None, angles_y=None, def_stiff=295, verbose=False, xy = [0, 0]):
         """
         Procedurally builds the MJDF with the specified segment lengths and radii. Assumes no branching. 
         Calculates bending stiffnes based on beam bending theory and sets the joint stiffness accordingly.
@@ -58,32 +68,38 @@ class CaneEditor():
         angles_x: list of x-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
         angles_y: list of y-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
         """
-        self.num_segments = len(lengths)
+        self.num_segments[branch_id] = len(lengths)
         self.spec.default.joint.stiffness = def_stiff
-        self.total_length = sum(lengths)
+        self.total_length[branch_id] = sum(lengths)
+        x_loc = xy[0]
+        y_loc = xy[1]
 
         self.inverted_k_list = []
 
         # find the base body
         world_body = None
+        existing_branch_ct = 0
         for body in self.spec.bodies:
             # print(f"Checking body: {body.name}")
             if body.name == "world":
                 world_body = body
-                break
+            if body.name.startswith("branch_body_"):
+                existing_branch_ct += 1
+        if existing_branch_ct > 0:
+            print(f"Found {existing_branch_ct} existing branch bodies in the model.")
         if world_body is None:
             raise ValueError("World body not found in the model. (How did that happen???? Is this an empty XML file? Just covering our bases I guess...)")
 
         parent_body = world_body
-        for i in range(self.num_segments):
+        for i in range(self.num_segments[branch_id]):
             if verbose:
-                print(f"Constructing segment {i} with length {lengths[i]:.3f} m")
+                print(f"Constructing segment {i+existing_branch_ct} with length {lengths[i]:.3f} m")
                 print(f"Radius of segment would be {radii[i]:.6f} m")
-            body_name = f"branch_body_{i}"
-            joint_name_y = f"branch_joint_y{i}"
-            joint_name_x = f"branch_joint_x{i}"
-            segment_geom_name = f"branch_geom{i}"
-            site_name = f"joint_site{i}"
+            body_name = f"branch_body_{i+existing_branch_ct}"
+            joint_name_y = f"branch_joint_y{i+existing_branch_ct}"
+            joint_name_x = f"branch_joint_x{i+existing_branch_ct}"
+            segment_geom_name = f"branch_geom{i+existing_branch_ct}"
+            site_name = f"joint_site{i+existing_branch_ct}"
 
             seg_length = lengths[i]
 
@@ -99,7 +115,7 @@ class CaneEditor():
             # add child body to parent
             if parent_body == world_body:
                 # start the first segment at the base
-                child_body = parent_body.add_body(name=body_name, pos=[0,0,0])
+                child_body = parent_body.add_body(name=body_name, pos=[x_loc, y_loc, 0])
             else:
                 # start the subsequent segments at the end of the previous segment
                 child_body = parent_body.add_body(name=body_name, pos=[0,0,lengths[i-1]])
@@ -119,7 +135,7 @@ class CaneEditor():
                                  type=mujoco.mjtGeom.mjGEOM_BOX,
                                  size=[radii[i], radii[i], seg_length/2],
                                 #  rgba=brown_variant)
-                                 rgba=DISCRETIZED_GREEN)
+                                 rgba=brown_variant)
             parent_body = child_body
 
         self.model = self.spec.compile()

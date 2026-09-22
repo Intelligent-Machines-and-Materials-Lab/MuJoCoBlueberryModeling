@@ -381,9 +381,16 @@ class TrialSim():
         return error 
 
 class BranchSim():
-    def __init__(self, BUSH_NUM, BRANCH_NUM, flex_mod=4.67e9, num_segs=8, diam_func_factor=1, disc_type='min_dist', lin_fit='length'):
+    def __init__(self, BUSH_NUM, BRANCH_NUM, editor=None, flex_mod=4.67e9, num_segs=8, diam_func_factor=1, disc_type='min_dist', lin_fit='length'):
         self.BUSH_NUM = BUSH_NUM
         self.BRANCH_NUM = BRANCH_NUM
+        self.editor = editor
+        if self.editor == None:
+            self.make_own_editor(flex_mod)
+
+        DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../data/')
+        diamdata = pd.read_csv(os.path.join(DATA_DIR, 'diameters/offset_branch_diameter_data.csv'))
+        self.diameter_data_df = pd.DataFrame(diamdata)
 
         # Handle the one exceeption where the branch bends back on itself 
         if self.BUSH_NUM == 9 and self.BRANCH_NUM == 2:
@@ -422,13 +429,13 @@ class BranchSim():
         for i, radius in enumerate(self.radii):
             print(f"  seg {i + 1}: {float(radius) * 1000:.3f} mm")
 
-        self.build_mjcf_model(flex_modulus=flex_mod)
+        self.add_branch_to_mjdf(flex_modulus=flex_mod)
 
         # self.editor.show_model_at_pos_script(self.zero_pos)
 
     def create_linearfit_from_diam_data(self):
         # get the diameter data for this bush and branch
-        self.field_measurements = diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
+        self.field_measurements = self.diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
         # print(self.field_measurements)
         # Get the center of the 3 measurements we actually took
         centroid = (self.field_measurements['Height'].mean(), self.field_measurements['Diameter'].mean())
@@ -439,7 +446,7 @@ class BranchSim():
 
     def create_length_linearfit_from_diam_data(self):
         # get the diameter data for this bush and branch
-        self.field_measurements = diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
+        self.field_measurements = self.diameter_data_df.query('Bush == ' + str(self.BUSH_NUM) + ' and Branch == ' + str(self.BRANCH_NUM))
         # calculate the length of branch it takes to get to the height measurements
         lengths_to_heights = []
         for height in self.field_measurements['Height']:
@@ -490,7 +497,7 @@ class BranchSim():
         angles_validated = False
         attempt = 1
         while not angles_validated:
-            segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(DATA_DIR, 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'),
+            segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../data/'), 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'),
                                                 make_plot=True, strictly_increasing=False, num_segs=num_segs, disc_type=disc_type, deterministic=False)
             segs_flipped = flip_segs_from_curve(segs_mm, print_output=False)
             seg_angles = splineconverter.get_angles_between_segments(segs_flipped) 
@@ -505,19 +512,26 @@ class BranchSim():
     def get_rad_at_height(self, height_in_m, slope, pt, diam_func_factor=1):
         diameter = slope*diam_func_factor*(height_in_m*1000-pt[0]) + pt[1]
         return diameter/2/1000 # convert mm to m
-    
-    def build_mjcf_model(self, flex_modulus=4.67e9):        # read in the base XML for the branch model (this has the world and the probe, but not the segments of the branch yet)
+
+    def make_own_editor(self, flex_modulus=4.67e9):
+        print(f"No editor passed in. Creating own CaneEditor instance.")
+        # This xml only has the environmental variables, not the branches
         xml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../urdf/branch_enviro.xml')
         with open(xml_path, 'r') as f:
             branch_xml = f.read()
-
         self.editor = CaneEditor(branch_xml, flex_mod=flex_modulus)
+    
+    def add_branch_to_mjdf(self, flex_modulus=4.67e9):
+        # Adds the branch segments to the MJCF model using the editor
+        branch_id = f"B{self.BUSH_NUM}_B{self.BRANCH_NUM}"
         self.editor.build_branch_from_lengths(self.seg_lengths, self.radii,
+                                               branch_id=branch_id,
                                                angles_x=self.seg_angles[:,0],
                                                angles_y=self.seg_angles[:,1],
-                                               verbose=False)
+                                               verbose=False,
+                                               xy=[0, 0])
         self.zero_pos = self.editor.get_zero_springref_pos()
-        self.editor.total_length = self.segs_flipped[-1][2]
+        self.editor.total_length[branch_id] = self.segs_flipped[-1][2]
 
     def save_mujoco_render(self, suffix='', pos=None):
         if pos is None:
@@ -542,8 +556,6 @@ if __name__ == "__main__":
     else:
         print("Data is NOT being recorded. Set RECORDING_DATA to True to save data to a folder.")
 
-    diamdata = pd.read_csv(os.path.join(DATA_DIR, 'diameters/offset_branch_diameter_data.csv'))
-    diameter_data_df = pd.DataFrame(diamdata)
     BUSH_DICT = {1:1, 3:2, 5:3, 9:4, 14:5, 23:6}
 
     # morris placeholders (default values)
