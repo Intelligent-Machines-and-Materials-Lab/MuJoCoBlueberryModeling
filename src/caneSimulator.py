@@ -79,11 +79,11 @@ def run_one_simulation(BUSH_NUM, BRANCH_NUM, TRIAL_NUM, test_mod, diam_func_fact
     try:
         Trial = TrialSim(Branch, TRIAL_NUM, force_angle=probe_angle, error_model='SMAPE')
         error = Trial.stiffness_error
+        return Branch, Trial, error
     except:
         print("===== Branch simulation failed. Skipping! =======")
-        error = np.nan
         banked_trials.append((test_mod, diam_func_factor, BUSH_NUM, BRANCH_NUM, TRIAL_NUM))
-    return Branch, Trial, error
+        return Branch, None, np.nan
 
 def save_sim_data_to_metadata(Branch, Trial, metadata, results_folder):
     metadata['sim_idx'].append(len(metadata['sim_idx']))
@@ -128,7 +128,7 @@ class TrialSim():
 
         self.PROBE_HEIGHT = self.Branch.field_measurements.query('Location == ' + str(TRIAL_NUM))['Height'].values[0]/1000
         print(f"Setting probe height to: {self.PROBE_HEIGHT}")
-        self.Branch.editor.define_probe_site(self.PROBE_HEIGHT, self.Branch.zero_pos, verbose=False)        
+        self.Branch.editor.define_probe_site(self.PROBE_HEIGHT, self.Branch.zero_pos, self.Branch.branch_id, verbose=False)        
         
         # import forces from csv
         filename = os.path.join(DATA_DIR, 'imu_cropped_push_data/bush_' + str(BUSH_DICT[self.Branch.BUSH_NUM]) + '_branch_' + str(self.Branch.BRANCH_NUM) + '_trial_' + str(self.TRIAL_NUM) + '.csv')
@@ -381,7 +381,7 @@ class TrialSim():
         return error 
 
 class BranchSim():
-    def __init__(self, BUSH_NUM, BRANCH_NUM, editor=None, flex_mod=4.67e9, num_segs=8, diam_func_factor=1, disc_type='min_dist', lin_fit='length'):
+    def __init__(self, BUSH_NUM, BRANCH_NUM, editor=None, flex_mod=4.67e9, num_segs=8, diam_func_factor=1, disc_type='min_dist', lin_fit='length', xy=[0, 0]):
         self.BUSH_NUM = BUSH_NUM
         self.BRANCH_NUM = BRANCH_NUM
         self.editor = editor
@@ -429,7 +429,7 @@ class BranchSim():
         for i, radius in enumerate(self.radii):
             print(f"  seg {i + 1}: {float(radius) * 1000:.3f} mm")
 
-        self.add_branch_to_mjdf(flex_modulus=flex_mod)
+        self.add_branch_to_mjdf(xy=xy, flex_modulus=flex_mod)
 
         # self.editor.show_model_at_pos_script(self.zero_pos)
 
@@ -521,15 +521,17 @@ class BranchSim():
             branch_xml = f.read()
         self.editor = CaneEditor(branch_xml, flex_mod=flex_modulus)
     
-    def add_branch_to_mjdf(self, flex_modulus=4.67e9):
+    def add_branch_to_mjdf(self, xy=[0,0], flex_modulus=4.67e9):
         # Adds the branch segments to the MJCF model using the editor
         branch_id = f"B{self.BUSH_NUM}_B{self.BRANCH_NUM}"
+        self.branch_id = branch_id
+        self.editor.add_branch_to_editor(branch_id)
         self.editor.build_branch_from_lengths(self.seg_lengths, self.radii,
                                                branch_id=branch_id,
                                                angles_x=self.seg_angles[:,0],
                                                angles_y=self.seg_angles[:,1],
                                                verbose=False,
-                                               xy=[0, 0])
+                                               xy=xy)
         self.zero_pos = self.editor.get_zero_springref_pos()
         self.editor.total_length[branch_id] = self.segs_flipped[-1][2]
 
@@ -613,21 +615,19 @@ if __name__ == "__main__":
                         print("Excluding trial 14/3/1 because camera data did not capture push point")
                         continue
 
-                plt.close('all') # close plots, just in case I missed any
-                B = BranchSim(BUSH_NUM, BRANCH_NUM)
-                B.editor.show_model_at_pos_script(B.zero_pos)
-
                 
                 # ------------- flexural modulus and diameter factor sweep (ICRA) ----------------
-                # diam_func_list = np.linspace(0, 1, num=2)
-                # flex_mod_list = np.linspace(1.82e9, 8.05e9, num=2)
-                # ctr = 0
-                # for test_mod in flex_mod_list:
-                #     for diam_func_factor in diam_func_list:
-                #         Branch, Trial, _ = run_one_simulation(BUSH_NUM, BRANCH_NUM, TRIAL_NUM, test_mod, diam_func_factor, 'min_dist', 'length', probe_angle, 'SMAPE')
-                #         if RECORDING_DATA:
-                #             metadata = save_sim_data_to_metadata(Branch, Trial, metadata, results_folder)
-                #         ctr += 1
+                diam_func_list = np.linspace(0, 1, num=2)
+                flex_mod_list = np.linspace(1.82e9, 8.05e9, num=2)
+                ctr = 0
+                for test_mod in flex_mod_list:
+                    for diam_func_factor in diam_func_list:
+                        Branch, Trial, _ = run_one_simulation(BUSH_NUM, BRANCH_NUM, TRIAL_NUM, test_mod, diam_func_factor, 'min_dist', 'length', probe_angle, 'SMAPE')
+                        if RECORDING_DATA and Trial is not None:
+                            metadata = save_sim_data_to_metadata(Branch, Trial, metadata, results_folder)
+                        elif RECORDING_DATA and Trial is None:
+                            print(f"Simulation for Branch {BUSH_NUM}/{BRANCH_NUM}/{TRIAL_NUM} did not produce a valid Trial. Not saving to file.")
+                        ctr += 1
             
                 # ------------- iterate over number of segments (Cindy's curiosity) ----------------
                 # segs_list = [4, 6, 8, 10, 12, 14, 16, 18]

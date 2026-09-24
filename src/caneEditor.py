@@ -292,12 +292,12 @@ class CaneEditor():
                 data.qpos[joint.id] = joint.springref
         return data.qpos
     
-    def define_probe_site(self, probe_height, model_pos, verbose=False):
+    def define_probe_site(self, probe_height, model_pos, branch_id, verbose=False):
         """
         Identify the last site before the specified probe height.
         Adds a new site at the probe height along the branch body after that site."""
         # raise a value error if probe height is above the total length of the branch
-        if probe_height > self.total_length:
+        if probe_height > self.total_length[branch_id]:
             print(f"Probe height {probe_height:.3f} m is above total length of branch {self.total_length:.3f} m. Check heights.")
             # raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
 
@@ -460,3 +460,9 @@ class CaneEditor():
         lexer = pygments.lexers.XmlLexer()
         highlighted = pygments.highlight(self.spec.to_xml(), lexer, formatter)
         display(HTML(f"<style>{formatter.get_style_defs()}</style>{highlighted}"))
+
+    def print_xml_to_console(self):
+        """
+        Prints the XML of the model to the console.
+        """
+        print(self.spec.to_xml())
