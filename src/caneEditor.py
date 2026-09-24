@@ -73,6 +73,7 @@ class CaneEditor():
         self.total_length[branch_id] = sum(lengths)
         x_loc = xy[0]
         y_loc = xy[1]
+        z_loc = xy[2] if len(xy) > 2 else 0
 
         self.inverted_k_list = []
 
@@ -115,7 +116,7 @@ class CaneEditor():
             # add child body to parent
             if parent_body == world_body:
                 # start the first segment at the base
-                child_body = parent_body.add_body(name=body_name, pos=[x_loc, y_loc, 0])
+                child_body = parent_body.add_body(name=body_name, pos=[x_loc, y_loc, z_loc])
             else:
                 # start the subsequent segments at the end of the previous segment
                 child_body = parent_body.add_body(name=body_name, pos=[0,0,lengths[i-1]])

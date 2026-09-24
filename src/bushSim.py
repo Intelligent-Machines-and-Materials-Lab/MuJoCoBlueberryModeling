@@ -34,16 +34,26 @@ import splineconverter
 from caneEditor import CaneEditor
 from caneSimulator import BranchSim, flip_segs_from_curve, get_midpoints
 
+def build_bush(editor, branch_origins_df, bush_num):
+    B = BranchSim(bush_num, 1, editor=editor, xy=branch_origins_df[bush_num][1])
+    B2 = BranchSim(bush_num, 2, editor=editor, xy=branch_origins_df[bush_num][2])
+    B3 = BranchSim(bush_num, 3, editor=editor, xy=branch_origins_df[bush_num][3])
+    return B, B2, B3
+
 if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True)
 
-    xml_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../urdf/branch_enviro.xml')
-    with open(xml_path, 'r') as f:
-        branch_xml = f.read()
-    editor = CaneEditor(branch_xml)
-    B = BranchSim(1, 1, editor=editor, xy=[.1, 0])
-    B2 = BranchSim(1, 2, editor=editor, xy=[-.1, 0])
-    B3 = BranchSim(1, 3, editor=editor, xy=[0, .1])
+    PATH_HERE = os.path.dirname(os.path.abspath(__file__))
+    XML_PATH = os.path.join(PATH_HERE, '../urdf/branch_enviro.xml')
+    with open(XML_PATH, 'r') as f:
+        BRANCH_XML = f.read()
+    BRANCH_ORIGINS_PATH =os.path.join(PATH_HERE, '../data/ccCurvesOGPos/origin_pts.pkl')
+    with open(BRANCH_ORIGINS_PATH, 'rb') as f:
+        BRANCH_ORIGINS_DF = pickle.load(f)
+    
+    editor = CaneEditor(BRANCH_XML)
+    # Bush 23's origin wasn't in the right place, so either fix that or use other ones
+    B1, B2, B3 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
     # B2.editor.show_model_at_pos_script(B2.zero_pos)
 
     editor.print_xml_to_console()
