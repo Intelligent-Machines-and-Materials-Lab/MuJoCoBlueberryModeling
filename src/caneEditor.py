@@ -46,18 +46,23 @@ class CaneEditor():
 
         # site defaults
         self.spec.default.site.type =mujoco.mjtGeom.mjGEOM_SPHERE
-        self.spec.default.site.size = np.array([0.01, 0.01, 0.01])
-        self.spec.default.site.rgba = np.array([0, 0, 0, 1])
+        self.spec.default.site.size = np.array([0.005, 0.005, 0.005])
+        # for now, make joints invisible
+        self.spec.default.site.rgba = np.array([0, 0, 0, 0])
 
         self.num_canes = 0
         self.cane_ids = []
         self.num_segments = {}  # key: cane_id, value: number of segments for that cane
         self.total_length = {}  # key: cane_id, value: total length of that cane
+        self.geom_ids_in_cane = {}  # key: cane_id, value: list of geom IDs for that cane
+
+        self.num_berries = 0
 
     def add_branch_to_editor(self, branch_id):
         # Establishes the ID for a new branch in the editor/model
         self.cane_ids.append(branch_id)
         self.num_canes += 1
+        self.geom_ids_in_cane[branch_id] = []
 
     def build_branch_from_lengths(self, lengths, radii, branch_id="only", angles_x=None, angles_y=None, def_stiff=295, verbose=False, xy = [0, 0]):
         """
@@ -101,12 +106,13 @@ class CaneEditor():
             joint_name_x = f"branch_joint_x{i+existing_branch_ct}"
             segment_geom_name = f"branch_geom{i+existing_branch_ct}"
             site_name = f"joint_site{i+existing_branch_ct}"
+            self.geom_ids_in_cane[branch_id].append(i+existing_branch_ct)
 
             seg_length = lengths[i]
 
             # Generate a random RGBA color for the segment
             rgba = np.random.uniform(size=4)
-            rgba[3] = 1
+            rgba[3] = .4 # alpha 
             brown_variant = (rgba + BROWN*2) / 3
 
             # Bake bend angles into body frame so qpos=0 is the natural shape (no springref torque at rest)
@@ -133,8 +139,8 @@ class CaneEditor():
             # add geometry to child body
             child_body.add_geom(name=segment_geom_name,
                                  pos=[0, 0, seg_length/2], 
-                                 type=mujoco.mjtGeom.mjGEOM_BOX,
-                                 size=[radii[i], radii[i], seg_length/2],
+                                 type=mujoco.mjtGeom.mjGEOM_CYLINDER,
+                                 size=[radii[i], seg_length/2, 0],
                                 #  rgba=brown_variant)
                                  rgba=brown_variant)
             parent_body = child_body
@@ -292,7 +298,74 @@ class CaneEditor():
                 # print(f"Setting joint {joint.name} springref to {joint.springref:3f}")
                 data.qpos[joint.id] = joint.springref
         return data.qpos
-    
+
+    def id_parent_body_for_loc(self, height, branch_id):
+        """
+        Returns the body of the link that a site or geom would be connected to if it was at the specified height along the branch.
+        branch_id: branch_id of the branch to check
+        height: height along the branch to find the parent body for
+        """
+        # compile the model 
+        self.model = self.spec.compile()
+        data = mujoco.MjData(self.model)
+        mujoco.mj_resetData(self.model, data)
+        mujoco.mj_forward(self.model, data)
+
+        print(f"Finding parent body for height {height} on branch {branch_id}")
+        id_num_list = self.geom_ids_in_cane[branch_id]
+        body_name_list = [f"branch_body_{k}" for k in id_num_list]
+        for body_name in body_name_list:
+            body = self.spec.body(body_name)
+            if body is not None:
+                body_zpos = data.xpos[body.id][2]
+                if body_zpos <= height:
+                    print(f"Body {body_name} at height {body_zpos} is below object height {height}")
+                    parent_body = body
+        return parent_body, data
+
+    def find_remaining_hypotenuse(self, height, branch_id, body, data):
+        """
+        Finds the remaining hypotenuse from the specified height to the end of the branch.
+        height: current height along the branch
+        branch_id: branch_id of the branch to check
+        body: the body object representing the branch
+        """
+        body_id = body.id
+        body_xpos = data.xpos[body_id]
+        rotmat = data.xmat[body_id].reshape(3, 3)
+        euler = R.from_matrix(rotmat).as_euler('xyz', degrees=False)
+        branch_axis_world = rotmat[:,2]  # z-axis of the body frame in world coordinates
+        angle_from_yz_plane = np.arcsin(branch_axis_world[0])  # angle from the yz-plane (x=0 plane)
+        self.init_probe_angle = angle_from_yz_plane
+        print(f"probed branch is at angle {np.degrees(angle_from_yz_plane):.2f} degrees from vertical plane (yz-plane)")
+ 
+        # add new site to the body at the probe height
+        z_remainder = height - body_xpos[2]
+        hyp1 = z_remainder / np.cos(euler[0])
+        hyp2 = hyp1 / np.cos(euler[1])
+        return hyp2
+
+    def add_point_mass_at_height_on_branch(self, height, branch_id, mass):
+        """
+        Adds a point mass at the specified height along the branch.
+        height: height along the branch to add the mass
+        branch_id: branch_id of the branch to add the mass to
+        mass: mass of the point mass to add
+        """
+        parent_body, data = self.id_parent_body_for_loc(height, branch_id)
+        hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
+        blueberry_body = parent_body.add_body(name=f"blueberry_body_{self.num_berries}", pos=[0, 0, hypotenuse])
+        blueberry_body.add_geom(name=f"blueberry_geom_{self.num_berries}", 
+                                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                                size=[.01, 0, 0],
+                                rgba=[.3, .345, .557, 1],
+                                mass=mass)
+        self.model = self.spec.compile()
+        # Implementation for adding the point mass goes here
+        # This could involve creating a new site or body at the calculated position
+        # and assigning the specified mass to it.
+        self.num_berries += 1
+
     def define_probe_site(self, probe_height, model_pos, branch_id, verbose=False):
         """
         Identify the last site before the specified probe height.

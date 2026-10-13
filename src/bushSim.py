@@ -1,7 +1,11 @@
 '''
 Using caneEditor and BranchSim to simulate several canes in one simulation
 Started 9/21/26 by Hannah
+
+Avg Legacy blueberry mass: 3.3g (https://www.ckdeliciouskitchen.com/en/products/Legacy-Blueberry.html)
+Diameter: 10-16mm (https://eathealthy365.com/a-complete-guide-to-blueberry-sizes-wild-vs-cultivated/)
 '''
+
 
 import os
 import pickle
@@ -54,6 +58,8 @@ if __name__ == "__main__":
     editor = CaneEditor(BRANCH_XML)
     # Bush 23's origin wasn't in the right place, so either fix that or use other ones
     B1, B2, B3 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
+    editor.add_point_mass_at_height_on_branch(0.5, "B1_B2", 0.1)
+    editor.add_point_mass_at_height_on_branch(0.6, "B1_B1", 0.1)
     # B2.editor.show_model_at_pos_script(B2.zero_pos)
 
     editor.print_xml_to_console()
@@ -72,23 +78,23 @@ if __name__ == "__main__":
     init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
     
 
-    SETTLE_TIME = 0.1  # seconds to settle under gravity (no applied force)
+    SETTLE_TIME = 2  # seconds to settle under gravity (no applied force)
     settle_steps = 0
     print("Starting settle phase...")
     with mujoco.viewer.launch_passive(model, data) as viewer:
         mujoco.mj_forward(model, data)
         viewer.sync()
-        while data.time < SETTLE_TIME and settle_steps < 10000 and viewer.is_running():
+        while data.time < SETTLE_TIME and viewer.is_running():
             step_start = time.time()
             mujoco.mj_step(model, data)
             if data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number > init_warn_count:
                 print(f"Bad acceleration at settle step {settle_steps}")
                 raise RuntimeError("Simulation unstable during settle phase: bad acceleration detected")
-            settle_steps += 1
+            # settle_steps += 1
             viewer.sync()
             time.sleep(max(0, model.opt.timestep - (time.time() - step_start)))
-        if settle_steps >= 10000:
-            raise RuntimeError("Settle phase exceeded maximum iterations - possible infinite loop")
+        # if settle_steps >= 10000:
+        #     raise RuntimeError("Settle phase exceeded maximum iterations - possible infinite loop")
         if data.time >= SETTLE_TIME:
             print(f"Settle phase complete after {settle_steps} steps")
             data.time = 0.0  # reset clock so DURATION counts from settled state
