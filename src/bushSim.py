@@ -58,9 +58,9 @@ if __name__ == "__main__":
     editor = CaneEditor(BRANCH_XML)
     # Bush 23's origin wasn't in the right place, so either fix that or use other ones
     B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
-    editor.add_num_berries_to_branch_at_height(0.5, "B1_B2", 2)
-    editor.add_num_berries_to_branch_at_height(0.6, "B1_B1", 10)
-    editor.add_num_berries_to_branch_at_height(0.7, "B1_B2", 5)
+    editor.add_berry_cluster_at_height(0.5, "B1_B2", 1)
+    editor.add_berry_cluster_at_height(0.6, "B1_B1", 1)
+    editor.add_berry_cluster_at_height(0.7, "B1_B2", 1)
     # B2.editor.show_model_at_pos_script(B2.zero_pos)
 
     # editor.print_xml_to_console()
@@ -77,9 +77,13 @@ if __name__ == "__main__":
     model.opt.tolerance = 1e-8
 
     init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
-    
+    # for i in range(data.ncon):
+    #     contact = data.contact[i]
+    #     geom1 = model.geom(contact.geom1).name
+    #     geom2 = model.geom(contact.geom2).name
+    #     print(geom1, geom2, "distance:", contact.dist)
 
-    SETTLE_TIME = 2  # seconds to settle under gravity (no applied force)
+    SETTLE_TIME = 1  # seconds to settle under gravity (no applied force)
     settle_steps = 0
     print("Starting settle phase...")
     with mujoco.viewer.launch_passive(model, data) as viewer:
@@ -93,6 +97,11 @@ if __name__ == "__main__":
                 raise RuntimeError("Simulation unstable during settle phase: bad acceleration detected")
             # settle_steps += 1
             viewer.sync()
+            # for i in range(data.ncon):
+            #     contact = data.contact[i]
+            #     geom1 = model.geom(contact.geom1).name
+            #     geom2 = model.geom(contact.geom2).name
+            #     print(geom1, geom2, "distance:", contact.dist)
             time.sleep(max(0, model.opt.timestep - (time.time() - step_start)))
         # if settle_steps >= 10000:
         #     raise RuntimeError("Settle phase exceeded maximum iterations - possible infinite loop")
