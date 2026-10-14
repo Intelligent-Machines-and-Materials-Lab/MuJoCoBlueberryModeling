@@ -49,6 +49,7 @@ class CaneEditor():
         self.spec.default.site.size = np.array([0.005, 0.005, 0.005])
         # for now, make joints invisible
         self.spec.default.site.rgba = np.array([0, 0, 0, 0])
+        self.stem_rad = .0005
 
         self.num_canes = 0
         self.cane_ids = []
@@ -345,7 +346,63 @@ class CaneEditor():
         hyp2 = hyp1 / np.cos(euler[1])
         return hyp2
 
-    def add_point_mass_at_height_on_branch(self, height, branch_id, mass):
+    def add_num_berries_to_branch_at_height(self, height, branch_id, num_berries, dist='uniform', hanging='true'):
+        """
+        Adds the specified number of berries at the given height along the branch.
+        num_berries: number of berries to add
+        height: height along the branch to add the berries
+        branch_id: branch_id of the branch to add the berries to
+        'uniform' uses all 3.3g berry masses
+        'normal' draws from standard normal distribution around 3.3g with st dev of 0.3g (totally guessing here on the variance)
+        """
+        if dist == 'uniform':
+            total_mass = 0.0033*num_berries
+        elif dist == 'normal':
+            masses = np.random.normal(loc=0.0033, scale=0.0003, size=num_berries) 
+            total_mass = sum(masses)
+        if hanging == 'true':
+            self.add_hanging_berry_to_branch_at_height(height, branch_id, mass=total_mass, radius=(0.013/2)*np.cbrt(num_berries))
+        else:
+            self.add_point_mass_at_height_on_branch(height, branch_id, mass=total_mass, radius=(0.013/2)*np.cbrt(num_berries))  
+
+    def add_hanging_berry_to_branch_at_height(self, height, branch_id, mass, radius):
+        """
+        Adds a single hanging berry at the given height along the branch.
+        height: height along the branch to add the berry
+        branch_id: branch_id of the branch to add the berry to
+        mass: mass of the hanging berry
+        radius: radius of the hanging berry
+        """
+        stem_len = .01
+        second_moment_area = (np.pi/4) * (self.stem_rad**4)
+        k = 2*self.E*second_moment_area / stem_len
+        # print(f"stem stiffness is {k}")
+        
+        parent_body, data = self.id_parent_body_for_loc(height, branch_id)
+        hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
+        # get radius of the geometry of the parent body
+        branch_radius = parent_body.geoms[0].size[0]  # assuming the first geom is a cylinder and size[0] is the radius
+        stem_body = parent_body.add_body(name=f"stem_body_{self.num_berries}", pos=[-branch_radius, 0, hypotenuse])
+        stem_body.quat = [0, 1, 0, 0]  # Rotate 180 degrees about local x so the stem points down the branch.
+        stem_body.add_joint(name=f"stem_joint_{self.num_berries}", type=mujoco.mjtJoint.mjJNT_BALL, stiffness=k/10)
+        stem_body.add_geom(name=f"stem_geom_{self.num_berries}",
+                           type=mujoco.mjtGeom.mjGEOM_CYLINDER,
+                           pos=[0, 0, stem_len/2],
+                           size=[self.stem_rad, stem_len/2, 0],
+                           rgba=BROWN,
+                           mass=.0005)
+        blueberry_body = stem_body.add_body(name=f"blueberry_body_{self.num_berries}", pos=[0, 0, stem_len])
+        blueberry_body.add_joint(name=f"blueberry_joint_{self.num_berries}", type=mujoco.mjtJoint.mjJNT_BALL, stiffness=k/10)
+        blueberry_body.add_geom(name=f"blueberry_geom_{self.num_berries}",
+                                type=mujoco.mjtGeom.mjGEOM_SPHERE,
+                                pos=[0, 0, radius],
+                                size=[radius, 0, 0],
+                                rgba=[.3, .345, .557, 1],
+                                mass=mass)
+        self.model = self.spec.compile()
+        self.num_berries += 1
+        
+    def add_point_mass_at_height_on_branch(self, height, branch_id, mass, radius):
         """
         Adds a point mass at the specified height along the branch.
         height: height along the branch to add the mass
@@ -357,7 +414,7 @@ class CaneEditor():
         blueberry_body = parent_body.add_body(name=f"blueberry_body_{self.num_berries}", pos=[0, 0, hypotenuse])
         blueberry_body.add_geom(name=f"blueberry_geom_{self.num_berries}", 
                                 type=mujoco.mjtGeom.mjGEOM_SPHERE,
-                                size=[.01, 0, 0],
+                                size=[radius, 0, 0],
                                 rgba=[.3, .345, .557, 1],
                                 mass=mass)
         self.model = self.spec.compile()

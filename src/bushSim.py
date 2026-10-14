@@ -41,8 +41,8 @@ from caneSimulator import BranchSim, flip_segs_from_curve, get_midpoints
 def build_bush(editor, branch_origins_df, bush_num):
     B = BranchSim(bush_num, 1, editor=editor, xy=branch_origins_df[bush_num][1])
     B2 = BranchSim(bush_num, 2, editor=editor, xy=branch_origins_df[bush_num][2])
-    B3 = BranchSim(bush_num, 3, editor=editor, xy=branch_origins_df[bush_num][3])
-    return B, B2, B3
+    # B3 = BranchSim(bush_num, 3, editor=editor, xy=branch_origins_df[bush_num][3])
+    return B, B2#, B3
 
 if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True)
@@ -57,12 +57,13 @@ if __name__ == "__main__":
     
     editor = CaneEditor(BRANCH_XML)
     # Bush 23's origin wasn't in the right place, so either fix that or use other ones
-    B1, B2, B3 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
-    editor.add_point_mass_at_height_on_branch(0.5, "B1_B2", 0.1)
-    editor.add_point_mass_at_height_on_branch(0.6, "B1_B1", 0.1)
+    B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
+    editor.add_num_berries_to_branch_at_height(0.5, "B1_B2", 2)
+    editor.add_num_berries_to_branch_at_height(0.6, "B1_B1", 10)
+    editor.add_num_berries_to_branch_at_height(0.7, "B1_B2", 5)
     # B2.editor.show_model_at_pos_script(B2.zero_pos)
 
-    editor.print_xml_to_console()
+    # editor.print_xml_to_console()
 
     model = editor.model
     data = mujoco.MjData(model)
