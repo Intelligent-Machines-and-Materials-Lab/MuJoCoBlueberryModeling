@@ -19,6 +19,7 @@ import pygments
 print_style = 'lovelace'
 from IPython.display import HTML, display
 from scipy.spatial.transform import Rotation as R 
+from utilities.blueberryclustergenerator import BlueberryClusterGenerator
 
 BROWN = np.array([0.4, 0.24, 0.0, 1])
 POLYLINE_GOLD = np.array([220/255, 159/255, 85/255, 1])
@@ -51,18 +52,14 @@ class CaneEditor():
         self.spec.default.site.size = np.array([0.005, 0.005, 0.005])
         # for now, make joints invisible
         self.spec.default.site.rgba = np.array([0, 0, 0, 0])
-        self.stem_rad = .0005
-        self.stem_len = 0.01  # Default stem length for berries
-        self.stem_stiff = 0 # appx k/10 from beam eqn
-        self.stem_damp = 0
+
+        self.BerryGen = BlueberryClusterGenerator()
 
         self.num_canes = 0
         self.cane_ids = []
         self.num_segments = {}  # key: cane_id, value: number of segments for that cane
         self.total_length = {}  # key: cane_id, value: total length of that cane
         self.geom_ids_in_cane = {}  # key: cane_id, value: list of geom IDs for that cane
-
-        self.num_berries = 0
 
     def add_branch_to_editor(self, branch_id):
         # Establishes the ID for a new branch in the editor/model
@@ -351,102 +348,7 @@ class CaneEditor():
         hyp2 = hyp1 / np.cos(euler[1])
         return hyp2
 
-    def add_num_berries_to_branch_at_height(self, height, branch_id, num_berries, dist='uniform', hanging='true'):
-        """
-        Adds the specified number of berries at the given height along the branch.
-        num_berries: number of berries to add
-        height: height along the branch to add the berries
-        branch_id: branch_id of the branch to add the berries to
-        'uniform' uses all 3.3g berry masses
-        'normal' draws from standard normal distribution around 3.3g with st dev of 0.3g (totally guessing here on the variance)
-        """
-        if dist == 'uniform':
-            total_mass = 0.0033*num_berries
-        elif dist == 'normal':
-            masses = np.random.normal(loc=0.0033, scale=0.0003, size=num_berries) 
-            total_mass = sum(masses)
-        if hanging == 'true':
-            self.add_hanging_berry_to_branch_at_height(height, branch_id, mass=total_mass, radius=(0.013/2)*np.cbrt(num_berries))
-        else:
-            self.add_point_mass_at_height_on_branch(height, branch_id, mass=total_mass, radius=(0.013/2)*np.cbrt(num_berries))  
-
-    def add_berry_cluster_at_height(self, height, branch_id, num_berries):
-        """
-        Adds a cluster of berries at the specified height along the branch.
-        height: height along the branch to add the berry cluster
-        branch_id: branch_id of the branch to add the berry cluster to
-        num_berries: number of berries in the cluster
-        """
-        stem_len = self.stem_len
-        main_stem_body = self.add_stem_at_height_on_branch(height, branch_id)
-        for _ in range(num_berries):
-            radius = 0.0065  # default radius for a single blueberry
-            mass = 0.0033  # default mass for a single blueberry
-            stem_body = main_stem_body.add_body(name=f"stem_body_{self.num_berries}", pos=[0, 0, self.stem_len])
-            # stem_body.quat = [0, 1, 0, 0]  # Rotate 180 degrees about local x so the stem points down the branch.
-            stem_body.add_joint(name=f"stem_joint_{self.num_berries}_x", 
-                                type=mujoco.mjtJoint.mjJNT_HINGE, 
-                                axis=[1, 0, 0], 
-                                stiffness=self.stem_stiff,
-                                damping=self.stem_damp)
-            stem_body.add_joint(name=f"stem_joint_{self.num_berries}_y", 
-                                type=mujoco.mjtJoint.mjJNT_HINGE, 
-                                axis=[0, 1, 0], 
-                                stiffness=self.stem_stiff,
-                                damping=self.stem_damp)
-            stem_body.add_geom(name=f"stem_geom_{self.num_berries}",
-                                type=mujoco.mjtGeom.mjGEOM_CYLINDER,
-                                pos=[0, 0, stem_len/2],
-                                size=[self.stem_rad, stem_len/2, 0],
-                                rgba=BROWN,
-                                mass=.0005)
-            blueberry_body = stem_body.add_body(name=f"blueberry_body_{self.num_berries}", pos=[0, 0, stem_len])
-            # blueberry_body.add_joint(name=f"blueberry_joint_{self.num_berries}_x", type=mujoco.mjtJoint.mjJNT_HINGE, axis=[1, 0, 0], stiffness=self.stem_stiff)
-            # blueberry_body.add_joint(name=f"blueberry_joint_{self.num_berries}_y", type=mujoco.mjtJoint.mjJNT_HINGE, axis=[0, 1, 0], stiffness=self.stem_stiff)
-            blueberry_body.add_geom(name=f"blueberry_geom_{self.num_berries}",
-                                    type=mujoco.mjtGeom.mjGEOM_SPHERE,
-                                    pos=[0, 0, radius],
-                                    size=[radius, 0, 0],
-                                    rgba=[.3, .345, .557, 1],
-                                    mass=mass,
-                                    solref=[.2, 1.0],
-                                    solimp=[.5, .8, .01, 1.0, 0.5])
-            self.model = self.spec.compile()
-            self.num_berries += 1
-
-    def add_stem_at_height_on_branch(self, height, branch_id):
-        """
-        Adds a stem at the specified height along the branch.
-        height: height along the branch to add the stem
-        branch_id: branch_id of the branch to add the stem to
-        stem_len: length of the stem
-        stiffness: stiffness of the stem joint
-        """
-        stem_len = 0.01  # default stem length, can be adjusted as needed
-        parent_body, data = self.id_parent_body_for_loc(height, branch_id)
-        hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
-        branch_radius = parent_body.geoms[0].size[0]  # assuming the first geom is a cylinder and size[0] is the radius
-        stem_body = parent_body.add_body(name=f"main_stem_body_{self.num_berries}", pos=[-branch_radius-self.stem_rad-.0002, 0, hypotenuse])
-        stem_body.quat = [.17365, 0, -.98481, 0]  # Rotate 180 degrees about local x so the stem points down the branch.
-        stem_body.add_joint(name=f"main_stem_joint_{self.num_berries}_x", 
-                                type=mujoco.mjtJoint.mjJNT_HINGE, 
-                                axis=[1, 0, 0], 
-                                stiffness=self.stem_stiff,
-                                damping=self.stem_damp)
-        stem_body.add_joint(name=f"main_stem_joint_{self.num_berries}_y", 
-                                type=mujoco.mjtJoint.mjJNT_HINGE, 
-                                axis=[0, 1, 0], 
-                                stiffness=self.stem_stiff,
-                                damping=self.stem_damp)
-        stem_body.add_geom(name=f"main_stem_geom_{self.num_berries}",
-                           type=mujoco.mjtGeom.mjGEOM_CYLINDER,
-                           pos=[0, 0, stem_len/2],
-                           size=[self.stem_rad, stem_len/2, 0],
-                           rgba=BROWN,
-                           mass=.0005)
-        return stem_body
-
-    def add_hanging_berry_to_branch_at_height(self, height, branch_id, mass, radius):
+    def add_hanging_berries_to_branch_at_height(self, height, branch_id, num):
         """
         Adds a single hanging berry at the given height along the branch.
         height: height along the branch to add the berry
@@ -454,44 +356,16 @@ class CaneEditor():
         mass: mass of the hanging berry
         radius: radius of the hanging berry
         """
-        stem_len = .01
-        # second_moment_area = (np.pi/4) * (self.stem_rad**4)
-        # k = 2*self.E*second_moment_area / stem_len
-        # print(f"stem stiffness is {k}")
-        
+        berry = self.BerryGen.gen_more_berries(num)
         parent_body, data = self.id_parent_body_for_loc(height, branch_id)
         hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
         # get radius of the geometry of the parent body
         branch_radius = parent_body.geoms[0].size[0]  # assuming the first geom is a cylinder and size[0] is the radius
-        stem_body = parent_body.add_body(name=f"stem_body_{self.num_berries}", pos=[-branch_radius, 0, hypotenuse])
-        stem_body.quat = [0, 1, 0, 0]  # Rotate 180 degrees about local x so the stem points down the branch.
-        stem_body.add_joint(name=f"stem_joint_{self.num_berries}_x", 
-                            type=mujoco.mjtJoint.mjJNT_HINGE, 
-                            axis=[1, 0, 0], 
-                            stiffness=self.stem_stiff,
-                            damping=self.stem_damp)
-        stem_body.add_joint(name=f"stem_joint_{self.num_berries}_y", 
-                            type=mujoco.mjtJoint.mjJNT_HINGE, 
-                            axis=[0, 1, 0], 
-                            stiffness=self.stem_stiff,
-                            damping=self.stem_damp)
-        stem_body.add_geom(name=f"stem_geom_{self.num_berries}",
-                           type=mujoco.mjtGeom.mjGEOM_CYLINDER,
-                           pos=[0, 0, stem_len/2],
-                           size=[self.stem_rad, stem_len/2, 0],
-                           rgba=BROWN,
-                           mass=.0005)
-        blueberry_body = stem_body.add_body(name=f"blueberry_body_{self.num_berries}", pos=[0, 0, stem_len])
-        # blueberry_body.add_joint(name=f"blueberry_joint_{self.num_berries}_x", type=mujoco.mjtJoint.mjJNT_HINGE, axis=[1, 0, 0], stiffness=self.stem_stiff)
-        # blueberry_body.add_joint(name=f"blueberry_joint_{self.num_berries}_y", type=mujoco.mjtJoint.mjJNT_HINGE, axis=[0, 1, 0], stiffness=self.stem_stiff)
-        blueberry_body.add_geom(name=f"blueberry_geom_{self.num_berries}",
-                                type=mujoco.mjtGeom.mjGEOM_SPHERE,
-                                pos=[0, 0, radius],
-                                size=[radius, 0, 0],
-                                rgba=[.3, .345, .557, 1],
-                                mass=mass)
+        cluster_frame = parent_body.add_frame(name=f"stem_frame_{self.BerryGen.berry_counter}", 
+                                              pos=[-branch_radius-self.BerryGen.stem_rad, 0, hypotenuse], 
+                                              quat=[.17365, 0, -.98481, 0])
+        self.spec.attach(berry, frame=cluster_frame, prefix=f"cluster_{self.BerryGen.berry_counter}")
         self.model = self.spec.compile()
-        self.num_berries += 1
         
     def add_point_mass_at_height_on_branch(self, height, branch_id, mass, radius):
         """
