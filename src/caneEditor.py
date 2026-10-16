@@ -361,9 +361,16 @@ class CaneEditor():
         hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
         # get radius of the geometry of the parent body
         branch_radius = parent_body.geoms[0].size[0]  # assuming the first geom is a cylinder and size[0] is the radius
+        azimuth = np.random.uniform(0.0, 360.0)
+        azimuth_rad = np.deg2rad(azimuth)
+        radial_offset = branch_radius + self.BerryGen.stem_rad
+        branch_rotation = R.from_euler("z", azimuth, degrees=True)
+        tilt_rotation = R.from_quat([0.0, -0.98481, 0.0, 0.17365])
+        frame_xyzw = (branch_rotation * tilt_rotation).as_quat()
+        frame_quat = [frame_xyzw[3], frame_xyzw[0], frame_xyzw[1], frame_xyzw[2]]
         cluster_frame = parent_body.add_frame(name=f"stem_frame_{self.BerryGen.berry_counter}", 
-                                              pos=[-branch_radius-self.BerryGen.stem_rad, 0, hypotenuse], 
-                                              quat=[.17365, 0, -.98481, 0])
+                              pos=[-radial_offset*np.cos(azimuth_rad), -radial_offset*np.sin(azimuth_rad), hypotenuse], 
+                              quat=frame_quat)
         self.spec.attach(berry, frame=cluster_frame, prefix=f"cluster_{self.BerryGen.berry_counter}")
         self.model = self.spec.compile()
         

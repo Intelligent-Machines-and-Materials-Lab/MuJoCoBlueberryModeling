@@ -46,7 +46,8 @@ class BlueberryClusterGenerator:
         blueberry_body=root.add_body(name=f"blueberry_body{self.berry_counter}", pos=[0, 0, stem_len])
         rand_blue = random.choices(BERRYCOLORS, weights=COLORWEIGHTS, k=1)[0]
         rand_size = random.gauss(self.def_blueberry_rad, self.def_blueberry_rad*0.1)
-        rand_mass = random.gauss(self.def_blueberry_mass, self.def_blueberry_mass*0.1)
+        # change the mass proportional to the size of the berry
+        rand_mass = self.def_blueberry_mass * (rand_size / self.def_blueberry_rad) ** 3
         blueberry_body.add_geom(name=f"blueberry_geom{self.berry_counter}",
                                type=mujoco.mjtGeom.mjGEOM_SPHERE,
                                pos=[0, 0, rand_size],
@@ -109,10 +110,12 @@ class BlueberryClusterGenerator:
                         for prev_quat in stem_quats[previous_start:i]
                     ]
                     for previous_index, angle_change in enumerate(angle_changes, start=previous_start):
-                        print(f"Angle change between berry {previous_index} and berry {i}: {angle_change:.2f} degrees")
+                        # print(f"Angle change between berry {previous_index} and berry {i}: {angle_change:.2f} degrees")
+                        pass
                     is_diff_dir = all(angle_change > 30 for angle_change in angle_changes)
                     if not is_diff_dir:
-                        print("Not different enough, retrying...")
+                        # print("Not different enough, retrying...")
+                        pass
             mount_frame.quat = quat
             stem_quats.append(quat)                
             spec.attach(single_spec, frame=mount_frame, prefix=f"berry{i}_")

@@ -17,6 +17,7 @@ os.environ['LIBGL_ALWAYS_SOFTWARE'] = '0'
 
 import numpy as np
 import pandas as pd
+import random
 import matplotlib.pyplot as plt
 
 try:
@@ -58,12 +59,20 @@ if __name__ == "__main__":
     editor = CaneEditor(BRANCH_XML)
     # Bush 23's origin wasn't in the right place, so either fix that or use other ones
     B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
-    editor.add_hanging_berries_to_branch_at_height(0.5, "B1_B2", 4)
-    editor.add_hanging_berries_to_branch_at_height(0.6, "B1_B1", 10)
-    editor.add_hanging_berries_to_branch_at_height(0.7, "B1_B2", 14)
-    editor.add_hanging_berries_to_branch_at_height(.68, "B1_B1", 40)
-    editor.add_hanging_berries_to_branch_at_height(.4, "B1_B2", 20)
-    # editor.add_berry_cluster_at_height(0.7, "B1_B2", 1)
+
+    # Blueberry setup
+    NUM_CLUSTERS_LOWER = 4
+    NUM_CLUSTERS_UPPER = 10
+    NUM_BERRIES_LOWER = 3
+    NUM_BERRIES_UPPER = 16
+    HEIGHT_LOWER = 0.35
+    HEIGHT_UPPER = 0.75
+
+    for i in range(editor.num_canes):
+        num_clusters = random.randint(NUM_CLUSTERS_LOWER, NUM_CLUSTERS_UPPER)
+        for j in range(num_clusters):
+            num_berries = random.randint(NUM_BERRIES_LOWER, NUM_BERRIES_UPPER)
+            editor.add_hanging_berries_to_branch_at_height(random.uniform(HEIGHT_LOWER, HEIGHT_UPPER), f"B1_B{i+1}", num_berries)
     # B2.editor.show_model_at_pos_script(B2.zero_pos)
 
     # editor.print_xml_to_console()
