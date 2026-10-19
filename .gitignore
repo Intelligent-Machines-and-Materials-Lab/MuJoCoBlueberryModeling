@@ -1,4 +1,5 @@
 ag-venv/
+venv-mujoco-usd/
 .ag-venv/
 images/plots
 ag-venv-py310/
