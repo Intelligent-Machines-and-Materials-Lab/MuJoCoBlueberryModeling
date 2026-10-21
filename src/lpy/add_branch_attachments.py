@@ -10,11 +10,12 @@ def extract_branch_info(usda_content):
     """Extract all branches with cyl_0 positions and levels."""
     branches = {}
 
-    branch_pattern = r'def Xform "((cyl_branch)L_(\d+)_Id_(\d+)|cyl_trunk[^"]*)"'
+    branch_pattern = r'def Xform "((cyl_branch)L_(\d+)_Id_(\d+)|(cyl_trunk[^"]*|cyl_rootstock))"'
 
     for match in re.finditer(branch_pattern, usda_content):
         full_name = match.group(1)
-        is_trunk = 'trunk' in full_name.lower()
+        is_trunk = 'trunk' in full_name.lower() or 'rootstock' in full_name.lower()
+        # For branch levels, extract the level number; for trunk/rootstock, use -1
         level = -1 if is_trunk else int(match.group(3))
 
         start_idx = match.end()
@@ -105,6 +106,8 @@ def rotate_by_inverse(q, v):
 
 def level_folder(branch_name):
     """Return the folder under center_lines holding this branch Xform."""
+    if 'rootstock' in branch_name.lower():
+        return "Rootstock"
     m = re.match(r'cyl_branchL_(\d+)_', branch_name)
     return f"Level{m.group(1)}" if m else "Trunk"
 
@@ -116,27 +119,47 @@ def distance(p1, p2):
 
 
 def find_attachment_targets(branches, cylinders):
-    """Find attachment target for each branch's cyl_0."""
+    """Find attachment target for each branch's cyl_0.
+    
+    For each branch, finds the closest cylinder from either:
+    - The same level (for branch-to-branch attachments)
+    - The parent level (for branch-to-trunk attachments)
+    Excludes cyl_0 cylinders as they are attachment points, not targets.
+    """
     attachments = {}
 
     for branch_name, branch_info in sorted(branches.items()):
         level = branch_info['level']
         cyl_0_pos = branch_info['cyl_0_pos']
 
-        parent_level = level - 1
-
         closest_cyl = None
         closest_dist = float('inf')
 
         for cyl_path, cyl_pos in cylinders.items():
-            if parent_level == -1:
-                if 'cyl_trunk' not in cyl_path:
-                    continue
+            # Check if this cylinder belongs to the same level or parent level
+            if level == -1:
+                # Trunk/root level - only attach to parent level (if it exists)
+                continue
             else:
-                if f'L_{parent_level}_' not in cyl_path:
-                    continue
+                # For regular branches, consider same level and parent level
+                same_level = f'L_{level}_' in cyl_path
+                parent_level_match = f'L_{level - 1}_' in cyl_path
+                
+                if level == 0:
+                    # Level 0 can attach to other L0 branches or to trunk
+                    if not (same_level or 'cyl_trunk' in cyl_path):
+                        continue
+                else:
+                    # Higher levels only attach to same level or parent level
+                    if not (same_level or parent_level_match):
+                        continue
 
+            # Skip cyl_0 cylinders (they are attachment points, not targets)
             if '/cyl_0' in cyl_path:
+                continue
+            
+            # Skip attaching a branch to itself
+            if branch_name in cyl_path:
                 continue
 
             dist = distance(cyl_0_pos, cyl_pos)
