@@ -110,7 +110,44 @@ def calculate_stiffness_for_joint(joint, cylinders, usda_path, E_trunk_level0=4e
     return K
 
 
-def load_spec(path, damping=0.15, E_trunk_level0=15e9, E_higher_levels=.1e9, dt=0.00001, plant_density_kg_m3=600):
+def add_floor(spec, size=(2, 1, 0.01), pos=(0, 0, 0),
+              rgb1=(1, 1, 1), rgb2=(1, 1, 1), markrgb=(0, 0, 0),
+              mark=mujoco.mjtMark.mjMARK_EDGE, tex_size=300,
+              texrepeat=(5, 5), reflectance=0.01, friction=None):
+    """Add a checkered ground plane (texture + material + plane geom) to the spec.
+
+    Mirrors the 'groundplane' asset in urdf/branch_base.xml; every property is overridable.
+    """
+    tex = spec.add_texture()
+    tex.name = "groundplane"
+    tex.type = mujoco.mjtTexture.mjTEXTURE_2D
+    tex.builtin = mujoco.mjtBuiltin.mjBUILTIN_CHECKER
+    tex.mark = mark
+    tex.rgb1 = list(rgb1)
+    tex.rgb2 = list(rgb2)
+    tex.markrgb = list(markrgb)
+    tex.width = tex_size
+    tex.height = tex_size
+
+    mat = spec.add_material()
+    mat.name = "groundplane"
+    mat.textures[mujoco.mjtTextureRole.mjTEXROLE_RGB] = "groundplane"
+    mat.texuniform = True
+    mat.texrepeat = list(texrepeat)
+    mat.reflectance = reflectance
+
+    floor = spec.worldbody.add_geom()
+    floor.name = "floor"
+    floor.type = mujoco.mjtGeom.mjGEOM_PLANE
+    floor.size = list(size)
+    floor.pos = list(pos)
+    floor.material = "groundplane"
+    if friction is not None:
+        floor.friction = list(friction)
+    return floor
+
+
+def load_spec(path, damping=0.15, E_trunk_level0=4e9, E_higher_levels=.01e9, dt=0.000001, plant_density_kg_m3=600):
     """Load USD file directly, remove free joints, add damping, stiffness, and mass.
 
     Args:
@@ -170,14 +207,66 @@ def describe(model):
         if mujoco.mjtJoint(model.jnt_type[j]).name != "mjJNT_FREE":  # Skip free joints
             print(f"{name:32s} {jtype:8s} {model.jnt_stiffness[j]:10.4g} {model.dof_damping[dof]:10.4g}")
 
+def make_geoms_transparent(spec, alpha=0.5):
+    """Make all geoms semi-transparent so joints are visible. Call before spec.compile()."""
+    for body in spec.bodies:
+        for geom in body.geoms:
+            rgba = list(geom.rgba)
+            rgba[3] = alpha
+            geom.rgba = rgba
+
+
+def add_joint_markers(spec, radius=0.003, rgba=(1, 0, 0, 1)):
+    """Add a small visual-only site at each joint pivot (sites have no mass and never collide).
+
+    A joint's pos is in its parent body's frame, so the site is placed in that same body.
+    X/Y hinge pairs share a pivot, so only one marker is added per distinct pivot.
+    """
+    seen = set()
+    for joint in spec.joints:
+        if not joint.name:
+            continue
+        pos = tuple(round(float(p), 9) for p in joint.pos)
+        key = (joint.parent.name, pos)
+        if key in seen:
+            continue
+        seen.add(key)
+        site = joint.parent.add_site()
+        site.name = f"pivot_{len(seen)}"
+        site.type = mujoco.mjtGeom.mjGEOM_SPHERE
+        site.size = [radius, 0, 0]
+        site.pos = list(pos)
+        site.rgba = list(rgba)
+    print(f"✓ Added {len(seen)} joint pivot markers")
+
+
+def disable_collisions(spec):
+    """Turn off collisions for every geom (including the floor); call after all geoms are added."""
+    n = 0
+    for geom in spec.geoms:
+        geom.contype = 0
+        geom.conaffinity = 0
+        n += 1
+    print(f"✓ Disabled collisions on {n} geoms")
+
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("usd_path")
     ap.add_argument("--view", action="store_true", help="open the interactive viewer")
+    ap.add_argument("--no-floor", action="store_true", help="don't add the ground plane")
+    ap.add_argument("--no-markers", action="store_true", help="don't add joint pivot marker spheres")
+    ap.add_argument("--collisions", action="store_true", help="keep collisions enabled (off by default)")
     args = ap.parse_args()
 
     spec = load_spec(args.usd_path)
+    make_geoms_transparent(spec)
+    if not args.no_markers:
+        add_joint_markers(spec)
+    if not args.no_floor:
+        add_floor(spec)
+    if not args.collisions:
+        disable_collisions(spec)
     model = spec.compile()
     data = mujoco.MjData(model)
     describe(model)

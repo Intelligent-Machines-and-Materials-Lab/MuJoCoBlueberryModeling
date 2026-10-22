@@ -1,8 +1,11 @@
 """
 Update USDA to connect branches to their parent cylinders.
-Replaces the first hinge joint (cyl_0→cyl_1) with attachment joint (cyl_0→parent).
+Adds an attachment joint (parent→cyl_0) pivoting at the cylinder:cylinder junction where each branch starts.
+
+Usage: python add_branch_attachments.py [input.usda] [output.usda]
 """
 import re
+import sys
 from pathlib import Path
 
 
@@ -127,6 +130,55 @@ def extract_orients(usda_content):
     return orients
 
 
+def extract_heights(usda_content):
+    """Map full cylinder key (branch/cyl_N) to its height."""
+    heights = {}
+    pattern = r'def Cylinder "([^"]+)"[^}]*?double height = ([^\n]+)'
+    for match in re.finditer(pattern, usda_content, re.DOTALL):
+        before = usda_content[:match.start()]
+        branch_matches = list(re.finditer(r'def Xform "([^"]*cyl_[^"]*)"', before))
+        key = (f"{branch_matches[-1].group(1)}/{match.group(1)}"
+               if branch_matches else match.group(1))
+        heights[key] = float(match.group(2))
+    return heights
+
+
+def rotate_vector(q, v):
+    """Rotate vector v by unit quaternion q = (w, x, y, z)."""
+    w, x, y, z = q
+    n = (w * w + x * x + y * y + z * z) ** 0.5
+    w, x, y, z = w / n, x / n, y / n, z / n
+    vx, vy, vz = v
+    tx = 2 * (y * vz - z * vy)
+    ty = 2 * (z * vx - x * vz)
+    tz = 2 * (x * vy - y * vx)
+    return (vx + w * tx + (y * tz - z * ty),
+            vy + w * ty + (z * tx - x * tz),
+            vz + w * tz + (x * ty - y * tx))
+
+
+def cylinder_end(key, sign, cylinders, orients, heights):
+    """World position of a cylinder's end (sign=-1 bottom, +1 top) along its local Z axis."""
+    axis = rotate_vector(orients[key], (0, 0, 1))
+    half = sign * heights[key] / 2
+    return tuple(c + a * half for c, a in zip(cylinders[key], axis))
+
+
+def find_junction_target(junction, cylinders, orients, heights, own_branch, preferred, tol=1e-6):
+    """Return (cylinder key, end sign) of a cylinder having an end at the junction.
+
+    Prefers the already-chosen target; otherwise any cylinder outside the branch that ends there.
+    """
+    candidates = [preferred] + [k for k in cylinders if k != preferred]
+    for key in candidates:
+        if own_branch in key or key not in heights:
+            continue
+        for sign in (1, -1):
+            if distance(cylinder_end(key, sign, cylinders, orients, heights), junction) < tol:
+                return key, sign
+    return None, None
+
+
 def rotate_by_inverse(q, v):
     """Rotate vector v by the inverse of unit quaternion q = (w, x, y, z)."""
     w, x, y, z = q
@@ -238,7 +290,7 @@ def find_attachment_targets(branches, cylinders):
     return attachments
 
 
-def update_first_hinge_joints(usda_content, attachments, branches, cylinders, orients):
+def update_first_hinge_joints(usda_content, attachments, branches, cylinders, orients, heights):
     """Insert an X+Y double hinge (parent cylinder -> branch cyl_0) per branch.
     
     This connects each branch's cyl_0 to its attachment target (parent branch or trunk).
@@ -248,6 +300,17 @@ def update_first_hinge_joints(usda_content, attachments, branches, cylinders, or
     root = 'lpy_ufo_00000_skeleton/skeleton/center_lines'
 
     for branch_name, target_path in attachments.items():
+        # Branches start at a cylinder:cylinder junction: the bottom end of the branch's cyl_0.
+        cyl0_key = f"{branch_name}/cyl_0"
+        junction = cylinder_end(cyl0_key, -1, cylinders, orients, heights)
+        found, sign = find_junction_target(
+            junction, cylinders, orients, heights, branch_name, target_path)
+        if found is None:
+            print(f"Warning: no cylinder ends at the root junction of {branch_name}; skipped")
+            continue
+        if found != target_path:
+            print(f"  retargeted {branch_name}: {target_path} -> {found} (nearest centre didn't touch the junction)")
+        target_path = found
         target_branch, target_cyl_name = target_path.rsplit('/', 1)
 
         target_full_path = f"</{root}/{level_folder(target_branch)}/{target_path}>"
@@ -276,12 +339,12 @@ def update_first_hinge_joints(usda_content, attachments, branches, cylinders, or
                             + usda_content[joint_start:])
             joint_start += 1
 
-        # Pivot at cyl_0's center, expressed in the parent cylinder's frame.
-        p0 = branches[branch_name]['cyl_0_pos']
+        # Pivot at the junction: the parent's end on one side, cyl_0's bottom end on the other.
         pt = cylinders[target_path]
-        delta = tuple(a - b for a, b in zip(p0, pt))
+        delta = tuple(a - b for a, b in zip(junction, pt))
         lp0 = rotate_by_inverse(orients[target_path], delta)
         lp0_str = f"({lp0[0]:.9g}, {lp0[1]:.9g}, {lp0[2]:.9g})"
+        lp1_str = f"(0, 0, {-heights[cyl0_key] / 2:.9g})"
 
         def joint(axis):
             return (
@@ -293,7 +356,7 @@ def update_first_hinge_joints(usda_content, attachments, branches, cylinders, or
                 f'{ind}    prepend rel physics:body0 = {target_full_path}\n'
                 f'{ind}    prepend rel physics:body1 = {cyl0_full_path}\n'
                 f'{ind}    point3f physics:localPos0 = {lp0_str}\n'
-                f'{ind}    point3f physics:localPos1 = (0, 0, 0)\n'
+                f'{ind}    point3f physics:localPos1 = {lp1_str}\n'
                 f'{ind}    float limit:rot{axis}:physics:low = -3.14159\n'
                 f'{ind}    float limit:rot{axis}:physics:high = 3.14159\n'
                 f'{ind}}}\n\n'
@@ -306,7 +369,7 @@ def update_first_hinge_joints(usda_content, attachments, branches, cylinders, or
 
 
 def main():
-    usda_path = "urdf/mod_lpy_ufo_split.usda"
+    usda_path = sys.argv[1] if len(sys.argv) > 1 else "urdf/mod_lpy_ufo_split.usda"
 
     with open(usda_path, 'r') as f:
         content = f.read()
@@ -320,6 +383,7 @@ def main():
     print(f"Found {len(cylinders)} cylinders")
 
     orients = extract_orients(content)
+    heights = extract_heights(content)
 
     print("Finding attachment points...")
     attachments = find_attachment_targets(branches, cylinders)
@@ -332,9 +396,9 @@ def main():
 
     print("\nUpdating first hinge joints...")
     updated_content = update_first_hinge_joints(
-        content, attachments, branches, cylinders, orients)
+        content, attachments, branches, cylinders, orients, heights)
 
-    output_path = "urdf/mod_lpy_ufo_with_attachments.usda"
+    output_path = sys.argv[2] if len(sys.argv) > 2 else "urdf/mod_lpy_ufo_with_attachments.usda"
     with open(output_path, 'w') as f:
         f.write(updated_content)
 

@@ -2,89 +2,56 @@
 Rename internal branch joints (HingeJoint_N_M_X/Y) to include branch ID for uniqueness.
 This prevents MuJoCo constraint conflicts from duplicate joint names.
 
-Pattern: HingeJoint_1_2_X → HingeJoint_branchL_0_Id_000_1_2_X
+Pattern: HingeJoint_1_2_X → HingeJoint_cyl_branchL_0_Id_000_1_2_X
+
+Usage: python rename_branch_joints.py [input.usda] [output.usda]
 """
 import re
+import sys
 from pathlib import Path
 
 
 def rename_branch_joints(usda_content):
-    """Rename internal branch joints to include branch identifier."""
-    
-    # Find all branch definitions and their internal joints
-    branch_pattern = r'def Xform "(cyl_branchL_\d+_Id_\d+)"'
-    
-    replacements = []
-    
-    for match in re.finditer(branch_pattern, usda_content):
+    """Rename internal branch joints to include the branch ID, keeping the _X/_Y axis suffix.
+
+    HingeJoint_1_2_X -> HingeJoint_cyl_branchL_0_Id_000_1_2_X. Each rename is applied only
+    inside its own branch block; attachment joints (HingeJoint_parent_*) are untouched.
+    """
+    branch_pattern = re.compile(r'def Xform "(cyl_branchL_\d+_Id_\d+)"')
+    joint_pattern = re.compile(r'(def PhysicsRevoluteJoint ")HingeJoint_(\d+)_(\d+)_([XY])(")')
+
+    out = []
+    pos = 0
+    renamed = 0
+    for match in branch_pattern.finditer(usda_content):
         branch_name = match.group(1)
-        start_pos = match.end()
-        
-        # Find the closing brace of this branch's Xform
-        open_brace = usda_content.find('{', start_pos)
-        if open_brace == -1:
+        open_brace = usda_content.find('{', match.end())
+        depth, end = 1, open_brace + 1
+        while depth and end < len(usda_content):
+            if usda_content[end] == '{':
+                depth += 1
+            elif usda_content[end] == '}':
+                depth -= 1
+            end += 1
+        if depth:
             continue
-        
-        brace_count = 1
-        search_pos = open_brace + 1
-        while brace_count > 0 and search_pos < len(usda_content):
-            if usda_content[search_pos] == '{':
-                brace_count += 1
-            elif usda_content[search_pos] == '}':
-                brace_count -= 1
-            search_pos += 1
-        
-        if brace_count != 0:
-            continue
-        
-        # Extract the branch content
-        branch_content = usda_content[open_brace:search_pos]
-        
-        # Find all HingeJoint_N_M_X/Y joints in this branch
-        # These are the INTERNAL joints (cyl_0→cyl_1, cyl_1→cyl_2, etc.)
-        # NOT the attachment joints (HingeJoint_parent)
-        joint_pattern = r'def PhysicsRevoluteJoint "(HingeJoint_(\d+)_(\d+)_[XY])"'
-        
-        for joint_match in re.finditer(joint_pattern, branch_content):
-            old_name = joint_match.group(1)
-            # Skip attachment joints
-            if 'parent' in old_name:
-                continue
-            
-            # Create unique name: HingeJoint_<branch>_N_M_X
-            new_name = f"HingeJoint_{branch_name}_{joint_match.group(2)}_{joint_match.group(3)}"
-            
-            replacements.append({
-                'old': old_name,
-                'new': new_name,
-                'branch': branch_name,
-            })
-    
-    # Apply replacements (in reverse order to avoid position shifts)
-    print(f"Renaming {len(replacements)} internal branch joints for uniqueness...")
-    
-    for repl in replacements:
-        old_name = repl['old']
-        new_name = repl['new']
-        
-        # Replace all occurrences of the joint name
-        old_pattern = rf'"{old_name}"'
-        new_str = f'"{new_name}"'
-        
-        count_before = usda_content.count(old_pattern)
-        usda_content = usda_content.replace(old_pattern, new_str)
-        count_after = usda_content.count(old_pattern)
-        
-        if count_before > count_after:
-            occurrences = count_before - count_after
-            print(f"  ✓ {repl['branch']}: {old_name} → {new_name} ({occurrences} occurrences)")
-    
-    return usda_content
+
+        block, n = joint_pattern.subn(
+            lambda m: f'{m.group(1)}HingeJoint_{branch_name}_{m.group(2)}_{m.group(3)}_{m.group(4)}{m.group(5)}',
+            usda_content[open_brace:end])
+        out.append(usda_content[pos:open_brace])
+        out.append(block)
+        pos = end
+        renamed += n
+    out.append(usda_content[pos:])
+
+    print(f"Renamed {renamed} internal branch joints")
+    return "".join(out)
 
 
 def main():
-    input_file = Path('urdf/mod_lpy_ufo_with_attachments.usda')
-    output_file = Path('urdf/mod_lpy_ufo_with_attachments_unique_joints.usda')
+    input_file = Path(sys.argv[1] if len(sys.argv) > 1 else 'urdf/mod_lpy_ufo_with_attachments.usda')
+    output_file = Path(sys.argv[2] if len(sys.argv) > 2 else 'urdf/mod_lpy_ufo_with_attachments_unique_joints.usda')
     
     print(f"Reading {input_file}...")
     with open(input_file, 'r') as f:

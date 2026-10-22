@@ -3,7 +3,8 @@ Convert USDA physics for direct MuJoCo loading:
 - PhysicsCollisionAPI -> PhysicsRigidBodyAPI (define proper bodies)
 - PhysicsDistanceJoint -> two PhysicsRevoluteJoint prims (one per axis)
 
-Each junction gets two hinges around perpendicular axes (X and Y).
+Each junction gets two hinges around perpendicular axes (X and Y). The pivot is placed at the
+shared end of the two cylinders: +height/2 of body0 (parent) and -height/2 of body1 (child).
 
 Usage:
     python fix_usda_physics_v2.py input.usda output.usda
@@ -12,9 +13,38 @@ import sys
 import re
 
 
+def find_cylinder_heights(content):
+    """Map each Cylinder prim's full path to its height by tracking prim nesting."""
+    heights = {}
+    stack = []      # prim names for each open brace
+    pending = None  # (name, is_cylinder) waiting for its opening brace
+    current_cyl = None
+    for line in content.splitlines():
+        m = re.match(r'\s*def\s+(?:(\w+)\s+)?"([^"]+)"', line)
+        if m:
+            pending = (m.group(2), m.group(1) == 'Cylinder')
+        h = re.match(r'\s*double height = ([^\s]+)', line)
+        if h and current_cyl:
+            heights[current_cyl] = float(h.group(1))
+        for ch in line:
+            if ch == '{':
+                stack.append(pending if pending else (None, False))
+                pending = None
+                if stack[-1][1]:
+                    current_cyl = '/' + '/'.join(n for n, _ in stack if n)
+            elif ch == '}':
+                popped = stack.pop() if stack else None
+                if popped and popped[1]:
+                    current_cyl = None
+    return heights
+
+
 def fix_usda_physics_v2(input_path, output_path):
     with open(input_path, 'r') as f:
         content = f.read()
+
+    cylinder_heights = find_cylinder_heights(content)
+    unplaced = []
 
     # Step 1: Replace PhysicsCollisionAPI with PhysicsRigidBodyAPI
     content = content.replace('PhysicsCollisionAPI', 'PhysicsRigidBodyAPI')
@@ -50,6 +80,17 @@ def fix_usda_physics_v2(input_path, output_path):
         body1 = body1_match.group(1) if body1_match else ""
         pos0 = pos0_match.group(1) if pos0_match else ""
         pos1 = pos1_match.group(1) if pos1_match else ""
+
+        # Pivot at the shared end of the two cylinders (cylinders are centered, axis along Z)
+        h0 = cylinder_heights.get(body0)
+        h1 = cylinder_heights.get(body1)
+        junction_pos = None
+        if h0 is not None and h1 is not None:
+            junction_pos = (f'0, 0, {h0 / 2:.9g}', f'0, 0, {-h1 / 2:.9g}')
+        else:
+            unplaced.append(joint_name)
+        if junction_pos:
+            pos0, pos1 = junction_pos
 
         # Build the two revolute joint definitions
         result = []
@@ -97,6 +138,9 @@ def fix_usda_physics_v2(input_path, output_path):
     joint_pattern = r'def PhysicsDistanceJoint "[^"]*" \([^)]*\)\s*\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
     content = re.sub(joint_pattern, replace_joint, content, flags=re.MULTILINE | re.DOTALL)
     print("✓ PhysicsDistanceJoint → two PhysicsRevoluteJoint (X and Y axes)")
+    print(f"✓ Pivots set at cylinder junctions ({len(cylinder_heights)} cylinders found)")
+    if unplaced:
+        print(f"! {len(unplaced)} joints kept their original pivots (cylinder not found): {unplaced[:5]}")
 
     # Step 3: Replace first hinge joints to attach branches
     # This is done by a separate script after we know attachment points
