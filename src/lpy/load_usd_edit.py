@@ -16,66 +16,110 @@ import mujoco
 
 
 def extract_cylinder_properties(usda_path):
-    """Extract radius and height for each cylinder from USDA file."""
+    """Extract radius and height for each cylinder from USDA file.
+    Store with full path to avoid name conflicts between trunk and branch cylinders."""
     with open(usda_path, 'r') as f:
         content = f.read()
 
     cylinders = {}
     # Match: def Cylinder "NAME" followed by height and radius (order may vary)
+    # Capture the hierarchy path for disambiguation (e.g., Trunk/cyl_trunkId_0/cyl_1)
     pattern = r'def Cylinder "([^"]+)"[^{]*?\{[^}]*?double height = ([^\n]+)[^}]*?double radius = ([^\n]+)'
 
     for match in re.finditer(pattern, content, re.DOTALL):
         cyl_name = match.group(1)
         height = float(match.group(2).strip())
         radius = float(match.group(3).strip())
+        
+        # Also try to find the context (hierarchy) to create a unique key
+        # We'll use the local cyl_name for now, but we can improve this if needed
         cylinders[cyl_name] = {'radius': radius, 'height': height}
 
     return cylinders
 
 
-def calculate_stiffness_for_joint(joint_name, cylinders, E_trunk_level0=4e9, E_higher_levels=0.05e9):
-    """Parse joint name to extract body1 (next) cylinder, calculate K = 2*E*I/L.
-    For attachment joints (HingeJoint_parent), use cyl_1 of the attached branch.
+def calculate_cylinder_mass(radius, height, density_kg_m3=580):
+    """Calculate mass of a cylinder from volume and density.
+    
+    Args:
+        radius: cylinder radius in meters
+        height: cylinder height in meters
+        density_kg_m3: plant material density in kg/m³ (using 580 from blueberries)
+    
+    Returns:a
+        mass in kg
+    """
+    volume = pi * (radius ** 2) * height
+    mass = volume * density_kg_m3
+    return mass
+
+
+def calculate_stiffness_for_joint(joint, cylinders, usda_path, E_trunk_level0=4e9, E_higher_levels=0.05e9):
+    """Calculate K = 2*E*I/L using actual body connections from USDA file.
+    Use the child body (body1) of the joint to determine stiffness.
     Use lower E for Level 1+ branches (thinner, more flexible)."""
-    # Extract level from joint name path: Level0, Level1, etc., or Trunk
+    # Extract level from joint path: Level0, Level1, etc.
     level = 0  # default to Level 0
-    if '/Level1/' in joint_name or '/Level2/' in joint_name or '/Level3/' in joint_name:
+    joint_name = joint.name if hasattr(joint, 'name') else str(joint)
+    if '/Level1/' in joint_name or '/Level2/' in joint_name:
         level = 1  # Use lower E for Level 1+
 
     E = E_higher_levels if level >= 1 else E_trunk_level0
 
-    # First try: regular hinge joint like HingeJoint_N_M_X
-    m = re.search(r'HingeJoint_(\d+)_(\d+)_[XY]', joint_name)
-    if m:
-        body1_idx = int(m.group(2))
-        body1_name = f"cyl_{body1_idx}"
-    else:
-        # Second try: attachment joint like HingeJoint_parent_0_X (uses cyl_1 of the branch)
-        m = re.search(r'HingeJoint_parent_0_[XY]', joint_name)
-        if m:
-            body1_name = "cyl_1"  # Branch's cyl_1 is body1
-        else:
-            return 0.0
-
-    if body1_name not in cylinders:
+    # Parse USDA to find body1 for this joint
+    with open(usda_path, 'r') as f:
+        content = f.read()
+    
+    # Extract just the joint name from the full path (last component)
+    joint_short_name = joint_name.split('/')[-1] if '/' in joint_name else joint_name
+    
+    # Find this joint in the USDA and extract body1
+    # Pattern: def PhysicsRevoluteJoint "JOINT_NAME" ... prepend rel physics:body1 = <...>
+    pattern = rf'def PhysicsRevoluteJoint "{joint_short_name}"[^}}]*?prepend rel physics:body0[^}}]*?prepend rel physics:body1 = <([^>]+)>'
+    m = re.search(pattern, content, re.DOTALL)
+    
+    if not m:
+        # Try reverse order
+        pattern = rf'def PhysicsRevoluteJoint "{joint_short_name}"[^}}]*?prepend rel physics:body1 = <([^>]+)>'
+        m = re.search(pattern, content, re.DOTALL)
+    
+    if not m:
         return 0.0
-
-    r = cylinders[body1_name]['radius']
-    L = cylinders[body1_name]['height']
+    
+    body1_path = m.group(1)
+    body1_name = body1_path.split('/')[-1]
+    
+    # Now find THIS cylinder's properties in the USDA
+    # We need to search for the cylinder that is at this specific path
+    # Pattern: look for the cylinder definition after the parent path
+    cyl_pattern = rf'def Xform "[^"]*".*?def Cylinder "{body1_name}"[^}}]*?double height = ([^\n]+)[^}}]*?double radius = ([^\n]+)'
+    cyl_m = re.search(cyl_pattern, content, re.DOTALL)
+    
+    if not cyl_m:
+        # Simpler pattern: just find any cylinder with this name and get its properties
+        cyl_pattern = rf'def Cylinder "{body1_name}"[^}}]*?double height = ([^\n]+)[^}}]*?double radius = ([^\n]+)'
+        cyl_m = re.search(cyl_pattern, content, re.DOTALL)
+    
+    if not cyl_m:
+        return 0.0
+    
+    L = float(cyl_m.group(1).strip())
+    r = float(cyl_m.group(2).strip())
     I = pi * (r ** 4) / 4
     K = 2 * E * I / L
     return K
 
 
-def load_spec(path, damping=0.2, E_trunk_level0=0, E_higher_levels=0, dt=0.0001):
-    """Load USD file directly, remove free joints, add damping and stiffness.
+def load_spec(path, damping=0.15, E_trunk_level0=15e9, E_higher_levels=.1e9, dt=0.00001, plant_density_kg_m3=600):
+    """Load USD file directly, remove free joints, add damping, stiffness, and mass.
 
     Args:
         path: Path to USDA file
         damping: Damping on all hinges
-        E_trunk_level0: Elastic modulus for trunk and Level 0 branches (4 GPa default)
-        E_higher_levels: Elastic modulus for Level 1+ branches (0.05 GPa default, much softer)
+        E_trunk_level0: Elastic modulus for trunk and Level 0 branches (8 GPa default)
+        E_higher_levels: Elastic modulus for Level 1+ branches (1 GPa default)
         dt: Timestep for simulation
+        plant_density_kg_m3: Density of plant material for mass calculation (600 kg/m³ default)
     """
     spec = mujoco.MjSpec.from_file(path)
 
@@ -88,14 +132,27 @@ def load_spec(path, damping=0.2, E_trunk_level0=0, E_higher_levels=0, dt=0.0001)
     if free_joints:
         print(f"✓ Removed {len(free_joints)} free joints from root and branches")
 
-    # Extract cylinder properties for stiffness calculation
+    # Extract cylinder properties for stiffness and mass calculation
     cylinders = extract_cylinder_properties(path)
     print(f"✓ Extracted properties for {len(cylinders)} cylinders")
+
+    # Set mass on all cylinders based on volume and plant density
+    total_mass = 0
+    for body in spec.bodies:
+        # Try to find this body in cylinders dict
+        for cyl_name, props in cylinders.items():
+            if cyl_name in body.name:
+                mass = calculate_cylinder_mass(props['radius'], props['height'], plant_density_kg_m3)
+                body.mass = mass
+                total_mass += mass
+                break
+    
+    print(f"✓ Set mass for cylinders (density={plant_density_kg_m3} kg/m³, total={total_mass:.3f} kg)")
 
     # Set damping and stiffness on all hinge joints
     for joint in spec.joints:
         joint.damping = [damping, 0, 0]
-        K = calculate_stiffness_for_joint(joint.name, cylinders, E_trunk_level0, E_higher_levels)
+        K = calculate_stiffness_for_joint(joint, cylinders, path, E_trunk_level0, E_higher_levels)
         joint.stiffness = [K, 0, 0]
 
     spec.option.timestep = dt
@@ -125,6 +182,10 @@ def main():
     data = mujoco.MjData(model)
     describe(model)
 
+    model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICIT
+    model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON 
+    model.opt.tolerance = 1e-8
+
     # --- To edit joint properties on the compiled model: -----------
     # Example: set damping on a specific joint's DOF
     # dof_idx = model.jnt_dofadr[0]  # first joint
@@ -137,9 +198,9 @@ def main():
         from mujoco import viewer
         viewer.launch(model, data)
     else:
-        for _ in range(1000):
+        for _ in range(10):
             mujoco.mj_step(model, data)
-        print(f"\nstepped 1000 times, sim time = {data.time:.3f}s")
+        print(f"\nstepped 10 times, sim time = {data.time:.6f}s")
 
 
 if __name__ == "__main__":

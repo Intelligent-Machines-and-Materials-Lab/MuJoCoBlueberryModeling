@@ -7,8 +7,16 @@ from pathlib import Path
 
 
 def extract_branch_info(usda_content):
-    """Extract all branches with cyl_0 positions and levels."""
+    """Extract all branches with cyl_0 positions and levels.
+    
+    Only includes branches that have a cyl_0 cylinder (non-empty branches).
+    Empty branches without any cylinders are skipped.
+    
+    Searches only within each Xform block to avoid matching cylinders
+    from subsequent branches.
+    """
     branches = {}
+    empty_branches = []
 
     branch_pattern = r'def Xform "((cyl_branch)L_(\d+)_Id_(\d+)|(cyl_trunk[^"]*|cyl_rootstock))"'
 
@@ -19,9 +27,27 @@ def extract_branch_info(usda_content):
         level = -1 if is_trunk else int(match.group(3))
 
         start_idx = match.end()
-        end_idx = start_idx + 5000
-
-        search_region = usda_content[start_idx:end_idx]
+        
+        # Find the opening brace of this Xform block
+        open_brace = usda_content.find('{', start_idx)
+        if open_brace == -1:
+            continue
+        
+        # Find the matching closing brace for this Xform
+        brace_count = 1
+        search_pos = open_brace + 1
+        while brace_count > 0 and search_pos < len(usda_content):
+            if usda_content[search_pos] == '{':
+                brace_count += 1
+            elif usda_content[search_pos] == '}':
+                brace_count -= 1
+            search_pos += 1
+        
+        if brace_count != 0:
+            continue  # Malformed, skip
+        
+        # Search only within this Xform block
+        search_region = usda_content[open_brace:search_pos]
 
         cyl0_match = re.search(
             r'def Cylinder "cyl_0"[^}]*?xformOp:translate = \(([^)]+)\)',
@@ -39,6 +65,17 @@ def extract_branch_info(usda_content):
                 }
             except ValueError:
                 pass
+        else:
+            # Track empty branches (no cyl_0 found within their block)
+            if not is_trunk:
+                empty_branches.append(full_name)
+    
+    if empty_branches:
+        print(f"\nSkipping {len(empty_branches)} empty branches (no cylinders):")
+        for b in sorted(empty_branches)[:5]:
+            print(f"  - {b}")
+        if len(empty_branches) > 5:
+            print(f"  ... and {len(empty_branches) - 5} more")
 
     return branches
 
@@ -125,8 +162,36 @@ def find_attachment_targets(branches, cylinders):
     - The same level (for branch-to-branch attachments)
     - The parent level (for branch-to-trunk attachments)
     Excludes cyl_0 cylinders as they are attachment points, not targets.
+    
+    Detects and reports duplicate branches (branches with identical cyl_0 positions).
+    All branches, including duplicates, are attached to their nearest target.
     """
     attachments = {}
+    
+    # First, detect duplicate branches with identical positions
+    positions_to_branches = {}
+    duplicates = {}
+    
+    for branch_name, branch_info in branches.items():
+        pos = branch_info['cyl_0_pos']
+        pos_key = tuple(round(x, 10) for x in pos)  # Round to avoid float precision issues
+        
+        if pos_key not in positions_to_branches:
+            positions_to_branches[pos_key] = []
+        positions_to_branches[pos_key].append(branch_name)
+    
+    # Find duplicates
+    for pos_key, branch_list in positions_to_branches.items():
+        if len(branch_list) > 1:
+            duplicates[pos_key] = branch_list
+    
+    if duplicates:
+        print(f"\nWARNING: Found {len(duplicates)} duplicate branch positions!")
+        for pos_key, branch_list in sorted(duplicates.items()):
+            print(f"  Position {pos_key}: {len(branch_list)} branches")
+            for branch in sorted(branch_list):
+                print(f"    - {branch}")
+        print(f"  → All duplicates will be attached to their nearest target (may create constraint stacks).")
 
     for branch_name, branch_info in sorted(branches.items()):
         level = branch_info['level']
@@ -174,7 +239,12 @@ def find_attachment_targets(branches, cylinders):
 
 
 def update_first_hinge_joints(usda_content, attachments, branches, cylinders, orients):
-    """Insert an X+Y double hinge (parent cylinder -> branch cyl_0) per branch."""
+    """Insert an X+Y double hinge (parent cylinder -> branch cyl_0) per branch.
+    
+    This connects each branch's cyl_0 to its attachment target (parent branch or trunk).
+    The original HingeJoint_1_2_X/Y joints connecting cyl_0 to cyl_1 are preserved,
+    creating a proper kinematic chain: parent → cyl_0 → cyl_1 → cyl_2 → ...
+    """
     root = 'lpy_ufo_00000_skeleton/skeleton/center_lines'
 
     for branch_name, target_path in attachments.items():
