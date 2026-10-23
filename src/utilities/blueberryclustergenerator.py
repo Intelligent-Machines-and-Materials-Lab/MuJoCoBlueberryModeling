@@ -16,7 +16,7 @@ UNRIPEPURPLE = np.array([.54, .46, .62, 1])
 UNRIPERED = np.array([.89, .72, .7, 1])
 UNRIPEGREEN = np.array([.7, .78, .67, 1])
 BERRYCOLORS = [BERRYBLUE1, BERRYBLUE2, BERRYBLUE3, UNRIPEPURPLE, UNRIPERED, UNRIPEGREEN]
-COLORWEIGHTS = [32, 32, 32, 2, .5, 1.5]
+COLORWEIGHTS = [30, 30, 30, 6, 1, 3]
 
 def xyz_to_mj_quat(x, y, z, deg=True):
     xyzw = R.from_euler('xyz', [x, y, z], degrees=deg).as_quat()
@@ -24,13 +24,21 @@ def xyz_to_mj_quat(x, y, z, deg=True):
     return quat_mj
 
 class BlueberryClusterGenerator:
-    def __init__(self):
-        self.def_blueberry_mass = .0033 # 3.3g
-        self.def_blueberry_rad = .0065 # 6.5mm 
+    def __init__(self, def_mass=.0033, def_rad=.0065):
+        self.def_blueberry_mass = def_mass # 3.3g
+        self.def_blueberry_rad = def_rad # 6.5mm 
         self.stem_rad = .0005 # 0.5mm
         self.stem_len_bounds = [.002, .013]
 
         self.berry_counter = 0
+
+    def change_berry_mass(self, new_mass=None):
+        if new_mass is not None:
+            old_mass = self.def_blueberry_mass
+            self.def_blueberry_mass = new_mass
+            # change volume proportionally to the new mass
+            new_rad = (self.def_blueberry_rad**3 * new_mass / old_mass) ** (1/3)
+            self.def_blueberry_rad = new_rad
 
     def gen_single_berry(self):
         spec = mujoco.MjSpec()
@@ -80,7 +88,7 @@ class BlueberryClusterGenerator:
             spec.attach(single_spec, frame=mount_frame, prefix=f"berry{i}_")
         return spec
 
-    def gen_more_berries(self, num_berries):
+    def gen_berry_cluster(self, num_berries):
         spec = mujoco.MjSpec()
         max_angle_change = 40 #degrees
         # generate a main stem proportional to the number of berries

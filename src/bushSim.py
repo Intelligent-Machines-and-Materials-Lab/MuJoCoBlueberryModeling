@@ -10,6 +10,7 @@ Diameter: 10-16mm (https://eathealthy365.com/a-complete-guide-to-blueberry-sizes
 import os
 import pickle
 import time
+import json
 
 os.environ['MUJOCO_GL'] = 'glfw'
 os.environ['PYOPENGL_PLATFORM'] = 'glx'
@@ -45,6 +46,48 @@ def build_bush(editor, branch_origins_df, bush_num):
     # B3 = BranchSim(bush_num, 3, editor=editor, xy=branch_origins_df[bush_num][3])
     return B, B2#, B3
 
+def make_berry_config(editor, bush_num, file_name):
+    # Blueberry setup
+    NUM_CLUSTERS_LOWER = 4
+    NUM_CLUSTERS_UPPER = 10
+    NUM_BERRIES_LOWER = 3
+    NUM_BERRIES_UPPER = 16
+    HEIGHT_LOWER = 0.35
+    HEIGHT_UPPER = 0.75
+    
+    BushConfig = {"num_canes": editor.num_canes}
+
+    for i in range(editor.num_canes):
+        num_clusters = random.randint(NUM_CLUSTERS_LOWER, NUM_CLUSTERS_UPPER)
+        BushConfig[f"B1_B{i+1}"] = {"num_clusters": num_clusters}
+        for j in range(num_clusters):
+            num_berries = random.randint(NUM_BERRIES_LOWER, NUM_BERRIES_UPPER)
+            height = random.uniform(HEIGHT_LOWER, HEIGHT_UPPER)
+            BushConfig[f"B1_B{i+1}"][f"cluster_{j+1}"] = {"num_berries": num_berries, "height": height}
+            editor.add_hanging_berries_to_branch_at_height(height, f"B1_B{i+1}", num_berries)
+
+    BERRY_CONFIGS_PATH = os.path.join(PATH_HERE, '../data/berry_configs')
+    os.makedirs(BERRY_CONFIGS_PATH, exist_ok=True)
+    with open(os.path.join(BERRY_CONFIGS_PATH, file_name), 'w') as f:
+        json.dump(BushConfig, f, indent=4)
+
+def load_berry_config(file_name):
+    BERRY_CONFIGS_PATH = os.path.join(PATH_HERE, '../data/berry_configs')
+    with open(os.path.join(BERRY_CONFIGS_PATH, file_name), 'r') as f:
+        config = json.load(f)
+
+    for i in range(config["num_canes"]):
+        branch_key = f"B1_B{i+1}"
+        if branch_key in config:
+            for j in range(config[branch_key]["num_clusters"]):
+                cluster_key = f"cluster_{j+1}"
+                if cluster_key in config[branch_key]:
+                    cluster = config[branch_key][cluster_key]
+                    height = cluster["height"]
+                    num_berries = cluster["num_berries"]
+                    editor.add_hanging_berries_to_branch_at_height(height, branch_key, num_berries)
+
+
 if __name__ == "__main__":
     np.set_printoptions(precision=3, suppress=True)
 
@@ -60,20 +103,9 @@ if __name__ == "__main__":
     # Bush 23's origin wasn't in the right place, so either fix that or use other ones
     B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
 
-    # Blueberry setup
-    NUM_CLUSTERS_LOWER = 4
-    NUM_CLUSTERS_UPPER = 10
-    NUM_BERRIES_LOWER = 3
-    NUM_BERRIES_UPPER = 16
-    HEIGHT_LOWER = 0.35
-    HEIGHT_UPPER = 0.75
-
-    for i in range(editor.num_canes):
-        num_clusters = random.randint(NUM_CLUSTERS_LOWER, NUM_CLUSTERS_UPPER)
-        for j in range(num_clusters):
-            num_berries = random.randint(NUM_BERRIES_LOWER, NUM_BERRIES_UPPER)
-            editor.add_hanging_berries_to_branch_at_height(random.uniform(HEIGHT_LOWER, HEIGHT_UPPER), f"B1_B{i+1}", num_berries)
-    # B2.editor.show_model_at_pos_script(B2.zero_pos)
+    # make_berry_config(editor, 1, f'bush_{1}_config.json')
+    editor.BerryGen.change_berry_mass(.01)  # example of changing the default berry mass before loading the config
+    load_berry_config('bush_1_config.json')
 
     # editor.print_xml_to_console()
 
@@ -89,13 +121,22 @@ if __name__ == "__main__":
     model.opt.tolerance = 1e-8
 
     init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
+    tip_ids = {b: model.site(f"tip_site_{b}").id for b in editor.cane_ids}
+    # each step (or every Nth):
+
+    DATA_CAP_RATE = 10 # Hz
+    # .copy() is required: site_xpos rows are views into live MjData memory
+    tip_positions = {b: [data.site_xpos[tip_ids[b]].copy()] for b in editor.cane_ids}
+    cap_times = [data.time]
+    next_cap_time = 1 / DATA_CAP_RATE
+    
     # for i in range(data.ncon):
     #     contact = data.contact[i]
     #     geom1 = model.geom(contact.geom1).name
     #     geom2 = model.geom(contact.geom2).name
     #     print(geom1, geom2, "distance:", contact.dist)
 
-    SETTLE_TIME = 1  # seconds to settle under gravity (no applied force)
+    SETTLE_TIME = .5  # seconds to settle under gravity (no applied force)
     settle_steps = 0
     print("Starting settle phase...")
     with mujoco.viewer.launch_passive(model, data) as viewer:
@@ -109,6 +150,13 @@ if __name__ == "__main__":
                 raise RuntimeError("Simulation unstable during settle phase: bad acceleration detected")
             # settle_steps += 1
             viewer.sync()
+
+            if data.time >= next_cap_time:
+                for b in editor.cane_ids:
+                    tip_positions[b].append(data.site_xpos[tip_ids[b]].copy())
+                cap_times.append(data.time)
+                next_cap_time += 1 / DATA_CAP_RATE
+
             # for i in range(data.ncon):
             #     contact = data.contact[i]
             #     geom1 = model.geom(contact.geom1).name
@@ -123,3 +171,15 @@ if __name__ == "__main__":
         while viewer.is_running():
             viewer.sync()
             time.sleep(0.01)
+
+# plot tip positions over time
+print(tip_positions)
+for b in editor.cane_ids:
+    tip_pos = np.array(tip_positions[b])
+    if tip_pos.ndim == 1:
+        tip_pos = tip_pos[np.newaxis, :]
+    plt.plot(cap_times, tip_pos[:, 2], label=f"{b} z")
+plt.xlabel("Time (s)")
+plt.ylabel("Tip position (m)")
+plt.legend()
+plt.show()

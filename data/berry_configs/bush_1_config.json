@@ -1,0 +1,65 @@
+{
+    "num_canes": 2,
+    "B1_B1": {
+        "num_clusters": 5,
+        "cluster_1": {
+            "num_berries": 10,
+            "height": 0.4166568032333222
+        },
+        "cluster_2": {
+            "num_berries": 10,
+            "height": 0.6458920980801748
+        },
+        "cluster_3": {
+            "num_berries": 3,
+            "height": 0.5821828605544657
+        },
+        "cluster_4": {
+            "num_berries": 9,
+            "height": 0.5510327121663535
+        },
+        "cluster_5": {
+            "num_berries": 12,
+            "height": 0.72073537253368
+        }
+    },
+    "B1_B2": {
+        "num_clusters": 9,
+        "cluster_1": {
+            "num_berries": 4,
+            "height": 0.6510002931436607
+        },
+        "cluster_2": {
+            "num_berries": 11,
+            "height": 0.6554207831271105
+        },
+        "cluster_3": {
+            "num_berries": 5,
+            "height": 0.39207262668265225
+        },
+        "cluster_4": {
+            "num_berries": 11,
+            "height": 0.45966435976142217
+        },
+        "cluster_5": {
+            "num_berries": 13,
+            "height": 0.3624609227258466
+        },
+        "cluster_6": {
+            "num_berries": 7,
+            "height": 0.7423532024610645
+        },
+        "cluster_7": {
+            "num_berries": 15,
+            "height": 0.5513259391785458
+        },
+        "cluster_8": {
+            "num_berries": 6,
+            "height": 0.5542667902848527
+        },
+        "cluster_9": {
+            "num_berries": 11,
+            "height": 0.3598388383001188
+        }
+    }
+}

@@ -25,6 +25,7 @@ BROWN = np.array([0.4, 0.24, 0.0, 1])
 POLYLINE_GOLD = np.array([220/255, 159/255, 85/255, 1])
 DISCRETIZED_GREEN = np.array([161/255, 142/255, 56/255, 1])
 LOAD_SITE_GREEN = np.array([98/255, 113/255, 76/255, 1])
+TIP_SITE_RED = np.array([0.8, 0.1, 0.1, 1])
 
 class CaneEditor():
     def __init__(self, xml_name, flex_mod = 4.67e9):
@@ -45,7 +46,7 @@ class CaneEditor():
 
         self.spec.default.joint.springref = 0
         # self.spec.default.joint.damping = 1.0
-        self.spec.default.joint.damping = 0.15
+        self.spec.default.joint.damping = [0.15, 0, 0]
 
         # site defaults
         self.spec.default.site.type =mujoco.mjtGeom.mjGEOM_SPHERE
@@ -77,7 +78,7 @@ class CaneEditor():
         angles_y: list of y-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
         """
         self.num_segments[branch_id] = len(lengths)
-        self.spec.default.joint.stiffness = def_stiff
+        self.spec.default.joint.stiffness = [def_stiff, 0, 0]
         self.total_length[branch_id] = sum(lengths)
         x_loc = xy[0]
         y_loc = xy[1]
@@ -146,6 +147,11 @@ class CaneEditor():
                                  size=[radii[i], seg_length/2, 0],
                                 #  rgba=brown_variant)
                                  rgba=brown_variant)
+            # mark the free end of the cane on the last segment
+            if i == self.num_segments[branch_id] - 1:
+                child_body.add_site(name=f"tip_site_{branch_id}",
+                                    pos=[0, 0, seg_length],
+                                    rgba=TIP_SITE_RED)
             parent_body = child_body
 
         self.model = self.spec.compile()
@@ -356,7 +362,7 @@ class CaneEditor():
         mass: mass of the hanging berry
         radius: radius of the hanging berry
         """
-        berry = self.BerryGen.gen_more_berries(num)
+        berry = self.BerryGen.gen_berry_cluster(num)
         parent_body, data = self.id_parent_body_for_loc(height, branch_id)
         hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
         # get radius of the geometry of the parent body
