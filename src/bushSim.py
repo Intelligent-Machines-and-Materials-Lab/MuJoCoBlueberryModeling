@@ -8,6 +8,8 @@ Diameter: 10-16mm (https://eathealthy365.com/a-complete-guide-to-blueberry-sizes
 
 
 import os
+import argparse
+import contextlib
 import pickle
 import time
 import json
@@ -20,6 +22,7 @@ import numpy as np
 import pandas as pd
 import random
 import matplotlib.pyplot as plt
+import logging
 
 try:
   print('Checking that the installation succeeded:')
@@ -87,8 +90,30 @@ def load_berry_config(file_name):
                     num_berries = cluster["num_berries"]
                     editor.add_hanging_berries_to_branch_at_height(height, branch_key, num_berries)
 
+def plot_tip_positions(results, axis=2):
+    '''
+    Plot tip position along one axis (0=x, 1=y, 2=z) over time.
+    One subplot per cane, one line per berry mass.
+    results: {avg_mass: {"times": (N,) array, "tips": {cane_id: (N, 3) array}}}
+    '''
+    cane_ids = list(next(iter(results.values()))["tips"].keys())
+    fig, axes = plt.subplots(len(cane_ids), 1, sharex=True, squeeze=False)
+    for ax, b in zip(axes[:, 0], cane_ids):
+        for avg_mass, run in results.items():
+            ax.plot(run["times"], run["tips"][b][:, axis], label=f"{avg_mass*1000:.2f} g")
+        ax.set_title(f"Cane {b}")
+        ax.set_ylabel(f"Tip {'xyz'[axis]} (m)")
+        ax.legend(title="Avg berry mass")
+    axes[-1, 0].set_xlabel("Time (s)")
+    plt.tight_layout()
+    plt.show()
+
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--headless", action="store_true", help="run without the MuJoCo viewer")
+    args = parser.parse_args()
+
     np.set_printoptions(precision=3, suppress=True)
 
     PATH_HERE = os.path.dirname(os.path.abspath(__file__))
@@ -98,88 +123,99 @@ if __name__ == "__main__":
     BRANCH_ORIGINS_PATH =os.path.join(PATH_HERE, '../data/ccCurvesOGPos/origin_pts.pkl')
     with open(BRANCH_ORIGINS_PATH, 'rb') as f:
         BRANCH_ORIGINS_DF = pickle.load(f)
-    
-    editor = CaneEditor(BRANCH_XML)
-    # Bush 23's origin wasn't in the right place, so either fix that or use other ones
-    B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
 
-    # make_berry_config(editor, 1, f'bush_{1}_config.json')
-    editor.BerryGen.change_berry_mass(.01)  # example of changing the default berry mass before loading the config
-    load_berry_config('bush_1_config.json')
+    logger = logging.getLogger(__name__)
+    logging.basicConfig(level=logging.INFO, 
+                        format="%(name)s | %(levelname)s | %(message)s")
+    logging.getLogger("caneEditor").setLevel(logging.INFO)
+    logging.getLogger("caneSimulator").setLevel(logging.INFO)
+    logging.getLogger("splineconverter").setLevel(logging.WARNING)
 
-    # editor.print_xml_to_console()
+    # {avg_mass: {"times": (N,) array, "tips": {cane_id: (N, 3) array}}}
+    results = {}
 
-    model = editor.model
-    data = mujoco.MjData(model)
-    mujoco.mj_resetData(model, data)
-    # data.qpos[:] = B2.zero_pos  # Set the model position to the initial zero position
-    mujoco.mj_forward(model, data)
+    for avg_mass in [.001, .00325, .0065]:
+        editor = CaneEditor(BRANCH_XML)
+        # Bush 23's origin wasn't in the right place, so either fix that or use other ones
+        B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
+        # make_berry_config(editor, 1, f'bush_{1}_config.json')
+        logger.info(f"Building bush with average berry mass {avg_mass*1000:.2f} g")
+        editor.BerryGen.change_berry_mass(avg_mass)  # example of changing the default berry mass before loading the config
+        load_berry_config('bush_1_config.json')
 
-    model.opt.timestep = .00002
-    model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICIT
-    model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON 
-    model.opt.tolerance = 1e-8
+        # editor.print_xml_to_console()
 
-    init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
-    tip_ids = {b: model.site(f"tip_site_{b}").id for b in editor.cane_ids}
-    # each step (or every Nth):
-
-    DATA_CAP_RATE = 10 # Hz
-    # .copy() is required: site_xpos rows are views into live MjData memory
-    tip_positions = {b: [data.site_xpos[tip_ids[b]].copy()] for b in editor.cane_ids}
-    cap_times = [data.time]
-    next_cap_time = 1 / DATA_CAP_RATE
-    
-    # for i in range(data.ncon):
-    #     contact = data.contact[i]
-    #     geom1 = model.geom(contact.geom1).name
-    #     geom2 = model.geom(contact.geom2).name
-    #     print(geom1, geom2, "distance:", contact.dist)
-
-    SETTLE_TIME = .5  # seconds to settle under gravity (no applied force)
-    settle_steps = 0
-    print("Starting settle phase...")
-    with mujoco.viewer.launch_passive(model, data) as viewer:
+        model = editor.model
+        data = mujoco.MjData(model)
+        mujoco.mj_resetData(model, data)
+        # data.qpos[:] = B2.zero_pos  # Set the model position to the initial zero position
         mujoco.mj_forward(model, data)
-        viewer.sync()
-        while data.time < SETTLE_TIME and viewer.is_running():
-            step_start = time.time()
-            mujoco.mj_step(model, data)
-            if data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number > init_warn_count:
-                print(f"Bad acceleration at settle step {settle_steps}")
-                raise RuntimeError("Simulation unstable during settle phase: bad acceleration detected")
-            # settle_steps += 1
-            viewer.sync()
 
-            if data.time >= next_cap_time:
-                for b in editor.cane_ids:
-                    tip_positions[b].append(data.site_xpos[tip_ids[b]].copy())
-                cap_times.append(data.time)
-                next_cap_time += 1 / DATA_CAP_RATE
+        model.opt.timestep = .00002
+        model.opt.integrator = mujoco.mjtIntegrator.mjINT_IMPLICIT
+        model.opt.solver = mujoco.mjtSolver.mjSOL_NEWTON 
+        model.opt.tolerance = 1e-8
 
-            # for i in range(data.ncon):
-            #     contact = data.contact[i]
-            #     geom1 = model.geom(contact.geom1).name
-            #     geom2 = model.geom(contact.geom2).name
-            #     print(geom1, geom2, "distance:", contact.dist)
-            time.sleep(max(0, model.opt.timestep - (time.time() - step_start)))
-        # if settle_steps >= 10000:
-        #     raise RuntimeError("Settle phase exceeded maximum iterations - possible infinite loop")
-        if data.time >= SETTLE_TIME:
-            print(f"Settle phase complete after {settle_steps} steps")
-            data.time = 0.0  # reset clock so DURATION counts from settled state
-        while viewer.is_running():
-            viewer.sync()
-            time.sleep(0.01)
+        init_warn_count = data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number
+        tip_ids = {b: model.site(f"tip_site_{b}").id for b in editor.cane_ids}
+        # each step (or every Nth):
 
-# plot tip positions over time
-print(tip_positions)
-for b in editor.cane_ids:
-    tip_pos = np.array(tip_positions[b])
-    if tip_pos.ndim == 1:
-        tip_pos = tip_pos[np.newaxis, :]
-    plt.plot(cap_times, tip_pos[:, 2], label=f"{b} z")
-plt.xlabel("Time (s)")
-plt.ylabel("Tip position (m)")
-plt.legend()
-plt.show()
+        DATA_CAP_RATE = 20 # Hz
+        # .copy() is required: site_xpos rows are views into live MjData memory
+        tip_positions = {b: [data.site_xpos[tip_ids[b]].copy()] for b in editor.cane_ids}
+        cap_times = [data.time]
+        next_cap_time = 1 / DATA_CAP_RATE
+        
+        # for i in range(data.ncon):
+        #     contact = data.contact[i]
+        #     geom1 = model.geom(contact.geom1).name
+        #     geom2 = model.geom(contact.geom2).name
+        #     print(geom1, geom2, "distance:", contact.dist)
+
+        SETTLE_TIME = 10  # seconds to settle under gravity (no applied force)
+        settle_steps = 0
+        logger.info("Starting settle phase...")
+        # nullcontext yields viewer=None, so headless runs skip all viewer calls
+        viewer_ctx = contextlib.nullcontext() if args.headless else mujoco.viewer.launch_passive(model, data)
+        with viewer_ctx as viewer:
+            mujoco.mj_forward(model, data)
+            if viewer:
+                viewer.sync()
+            while data.time < SETTLE_TIME and (viewer is None or viewer.is_running()):
+                step_start = time.time()
+                mujoco.mj_step(model, data)
+                if data.warning[mujoco.mjtWarning.mjWARN_BADQACC].number > init_warn_count:
+                    logger.error(f"Bad acceleration at settle step {settle_steps}")
+                    raise RuntimeError("Simulation unstable during settle phase: bad acceleration detected")
+
+                if data.time >= next_cap_time:
+                    for b in editor.cane_ids:
+                        tip_positions[b].append(data.site_xpos[tip_ids[b]].copy())
+                    cap_times.append(data.time)
+                    next_cap_time += 1 / DATA_CAP_RATE
+
+                # real-time pacing only matters when watching; headless runs as fast as possible
+                if viewer:
+                    viewer.sync()
+                    time.sleep(max(0, model.opt.timestep - (time.time() - step_start)))
+            if data.time >= SETTLE_TIME:
+                logger.info(f"Settle phase complete at time {data.time} seconds")
+                data.time = 0.0  # reset clock so DURATION counts from settled state
+            while viewer and viewer.is_running():
+                viewer.sync()
+                time.sleep(0.01)
+
+        results[avg_mass] = {
+            "times": np.array(cap_times),
+            "tips": {b: np.array(tip_positions[b]) for b in editor.cane_ids},
+        }
+
+        mass_str = f"{avg_mass*1000:.2f}_g".replace(".", "_")
+        editor.save_picture_of_model_script(data.qpos, f"images/berryloadpics/bush_{mass_str}.png")
+
+    RESULTS_PATH = os.path.join(PATH_HERE, '../data/tip_positions')
+    os.makedirs(RESULTS_PATH, exist_ok=True)
+    with open(os.path.join(RESULTS_PATH, 'bush_1_mass_sweep.pkl'), 'wb') as f:
+        pickle.dump(results, f)
+
+    plot_tip_positions(results)

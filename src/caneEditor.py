@@ -19,6 +19,7 @@ import pygments
 print_style = 'lovelace'
 from IPython.display import HTML, display
 from scipy.spatial.transform import Rotation as R 
+import logging
 from utilities.blueberryclustergenerator import BlueberryClusterGenerator
 
 BROWN = np.array([0.4, 0.24, 0.0, 1])
@@ -26,6 +27,8 @@ POLYLINE_GOLD = np.array([220/255, 159/255, 85/255, 1])
 DISCRETIZED_GREEN = np.array([161/255, 142/255, 56/255, 1])
 LOAD_SITE_GREEN = np.array([98/255, 113/255, 76/255, 1])
 TIP_SITE_RED = np.array([0.8, 0.1, 0.1, 1])
+
+logger = logging.getLogger(__name__)
 
 class CaneEditor():
     def __init__(self, xml_name, flex_mod = 4.67e9):
@@ -46,7 +49,7 @@ class CaneEditor():
 
         self.spec.default.joint.springref = 0
         # self.spec.default.joint.damping = 1.0
-        self.spec.default.joint.damping = [0.15, 0, 0]
+        self.spec.default.joint.damping = 0.15 # [0.15, 0, 0]
 
         # site defaults
         self.spec.default.site.type =mujoco.mjtGeom.mjGEOM_SPHERE
@@ -68,7 +71,7 @@ class CaneEditor():
         self.num_canes += 1
         self.geom_ids_in_cane[branch_id] = []
 
-    def build_branch_from_lengths(self, lengths, radii, branch_id="only", angles_x=None, angles_y=None, def_stiff=295, verbose=False, xy = [0, 0]):
+    def build_branch_from_lengths(self, lengths, radii, branch_id="only", angles_x=None, angles_y=None, def_stiff=295, xy = [0, 0]):
         """
         Procedurally builds the MJDF with the specified segment lengths and radii. Assumes no branching. 
         Calculates bending stiffnes based on beam bending theory and sets the joint stiffness accordingly.
@@ -78,7 +81,7 @@ class CaneEditor():
         angles_y: list of y-axis bend angles (radians) per segment; baked into body frames so qpos=0 is the natural shape
         """
         self.num_segments[branch_id] = len(lengths)
-        self.spec.default.joint.stiffness = [def_stiff, 0, 0]
+        self.spec.default.joint.stiffness = def_stiff # [def_stiff, 0, 0]
         self.total_length[branch_id] = sum(lengths)
         x_loc = xy[0]
         y_loc = xy[1]
@@ -96,15 +99,15 @@ class CaneEditor():
             if body.name.startswith("branch_body_"):
                 existing_branch_ct += 1
         if existing_branch_ct > 0:
-            print(f"Found {existing_branch_ct} existing branch bodies in the model.")
+            logger.debug(f"Found {existing_branch_ct} existing branch bodies in the model.")
         if world_body is None:
             raise ValueError("World body not found in the model. (How did that happen???? Is this an empty XML file? Just covering our bases I guess...)")
 
         parent_body = world_body
         for i in range(self.num_segments[branch_id]):
-            if verbose:
-                print(f"Constructing segment {i+existing_branch_ct} with length {lengths[i]:.3f} m")
-                print(f"Radius of segment would be {radii[i]:.6f} m")
+            logger.debug(f"Constructing segment {i+existing_branch_ct} with length {lengths[i]:.3f} m")
+            logger.debug(f"Radius of segment would be {radii[i]:.6f} m")
+
             body_name = f"branch_body_{i+existing_branch_ct}"
             joint_name_y = f"branch_joint_y{i+existing_branch_ct}"
             joint_name_x = f"branch_joint_x{i+existing_branch_ct}"
@@ -135,8 +138,7 @@ class CaneEditor():
             second_moment_area = (np.pi/4) * (radii[i]**4)
             k = 2*self.E*second_moment_area / seg_length
             self.inverted_k_list.append(1/k)
-            if verbose:
-                print(f"Estimated bending stiffness k via beam bending: {k:.1f} Nm/rad")
+            logger.debug(f"Estimated bending stiffness k via beam bending: {k:.1f} Nm/rad")
             child_body.add_joint(name=joint_name_x, axis=[1, 0, 0], stiffness=k)
             child_body.add_joint(name=joint_name_y, axis=[0, 1, 0], stiffness=k)
             child_body.add_site(name=site_name)  
@@ -320,15 +322,17 @@ class CaneEditor():
         mujoco.mj_resetData(self.model, data)
         mujoco.mj_forward(self.model, data)
 
-        print(f"Finding parent body for height {height} on branch {branch_id}")
+        logger.debug(f"Finding parent body for height {height} on branch {branch_id}")
+
         id_num_list = self.geom_ids_in_cane[branch_id]
         body_name_list = [f"branch_body_{k}" for k in id_num_list]
         for body_name in body_name_list:
             body = self.spec.body(body_name)
             if body is not None:
                 body_zpos = data.xpos[body.id][2]
+                logger.debug(f"Checking body {body_name} at height {body_zpos}")
                 if body_zpos <= height:
-                    print(f"Body {body_name} at height {body_zpos} is below object height {height}")
+                    logger.debug(f"Body {body_name} at height {body_zpos} is below object height {height}")
                     parent_body = body
         return parent_body, data
 
@@ -346,8 +350,7 @@ class CaneEditor():
         branch_axis_world = rotmat[:,2]  # z-axis of the body frame in world coordinates
         angle_from_yz_plane = np.arcsin(branch_axis_world[0])  # angle from the yz-plane (x=0 plane)
         self.init_probe_angle = angle_from_yz_plane
-        print(f"probed branch is at angle {np.degrees(angle_from_yz_plane):.2f} degrees from vertical plane (yz-plane)")
- 
+        logger.debug(f"probed branch is at angle {np.degrees(angle_from_yz_plane):.2f} degrees from vertical plane (yz-plane)")
         # add new site to the body at the probe height
         z_remainder = height - body_xpos[2]
         hyp1 = z_remainder / np.cos(euler[0])
@@ -401,13 +404,13 @@ class CaneEditor():
         # and assigning the specified mass to it.
         self.num_berries += 1
 
-    def define_probe_site(self, probe_height, model_pos, branch_id, verbose=False):
+    def define_probe_site(self, probe_height, model_pos, branch_id):
         """
         Identify the last site before the specified probe height.
         Adds a new site at the probe height along the branch body after that site."""
         # raise a value error if probe height is above the total length of the branch
         if probe_height > self.total_length[branch_id]:
-            print(f"Probe height {probe_height:.3f} m is above total length of branch {self.total_length:.3f} m. Check heights.")
+            logger.warning(f"Probe height {probe_height:.3f} m is above total length of branch {self.total_length[branch_id]:.3f} m. Check heights.")
             # raise ValueError("Probe height is above total length of branch. Please set a lower probe height.")
 
         # Remove existing probe_contact_site if it already exists
@@ -431,8 +434,7 @@ class CaneEditor():
                 # print(f"Site {i} is below probe height: {site_xpos[2]} < {probe_height}")
                 last_site_i = i
 
-        if verbose:
-            print(f"Last site before probe height is {last_site_i} with position {data.site_xpos[last_site_i]}")
+        logger.debug(f"Last site before probe height is {last_site_i} with position {data.site_xpos[last_site_i]}")
 
         # get information about the last site
         name = self.model.site(last_site_i).name
@@ -446,20 +448,18 @@ class CaneEditor():
         self.init_probe_angle = angle_from_yz_plane
         print(f"probed branch is at angle {np.degrees(angle_from_yz_plane):.2f} degrees from vertical plane (yz-plane)")
 
-        if verbose:
-            print("Last site before probe height:")
-            print(f"Body name of {name}: {body_name}")
-            print(f"World position of {name}: {site_xpos}")
-            print(f"Local position of {name}: {self.model.site_pos[last_site_i]}")
-            print(f"Body {self.model.body(body_id).name} is at location {data.xpos[body_id]}")
-            print(f"Body {self.model.body(body_id).name} is at Euler angles {euler}")
+        logger.debug("Last site before probe height:")
+        logger.debug(f"Body name of {name}: {body_name}")
+        logger.debug(f"World position of {name}: {site_xpos}")
+        logger.debug(f"Local position of {name}: {self.model.site_pos[last_site_i]}")
+        logger.debug(f"Body {self.model.body(body_id).name} is at location {data.xpos[body_id]}")
+        logger.debug(f"Body {self.model.body(body_id).name} is at Euler angles {euler}")
         
         # add new site to the body at the probe height
         z_remainder = probe_height - site_xpos[2]
         hyp1 = z_remainder / np.cos(euler[0])
         hyp2 = hyp1 / np.cos(euler[1])
-        if verbose:
-            print(f"distance along branch to probe site: {hyp2:.3f} m")
+        logger.debug(f"distance along branch to probe site: {hyp2:.3f} m")
 
         for body in self.spec.bodies:
             if body.name == body_name:
@@ -471,8 +471,7 @@ class CaneEditor():
                         body.add_site(name="probe_contact_site",
                               pos=[0, 0, hyp2],
                               rgba=LOAD_SITE_GREEN)
-                        if verbose:
-                            print(f"Added probe contact site to body {body_name} at local position [0, 0, {hyp2:.3f}]")
+                        logger.debug(f"Added probe contact site to body {body_name} at local position [0, 0, {hyp2:.3f}]")
                     else:
                         raise ValueError("Probe position exceeds segment length in bent position. Please set a lower probe height.")
                 else:
@@ -481,7 +480,7 @@ class CaneEditor():
         self.model = self.spec.compile()
 
     
-    def move_probe_to_site(self, probe_height, model_pos, verbose=False):
+    def move_probe_to_site(self, probe_height, model_pos):
         """ 
         Redefines the probe position to be a little to the left of the new site. 
         """
@@ -531,6 +530,24 @@ class CaneEditor():
         ax.axis('off')
         fig.tight_layout()
         plt.show()
+
+    def save_picture_of_model_script(self, pos, filename):
+        """
+        Saves an image of the model at the given position to filename using matplotlib.
+        Use this instead of save_picture_of_model() when running in a normal Python script.
+        """
+        data = mujoco.MjData(self.model)
+        data.qpos[:] = pos
+        with mujoco.Renderer(self.model, height=480, width=640) as renderer:
+            mujoco.mj_forward(self.model, data)
+            renderer.update_scene(data)
+            img = renderer.render()
+        plt.close('all')
+        fig, ax = plt.subplots()
+        ax.imshow(img)
+        ax.axis('off')
+        fig.tight_layout()
+        fig.savefig(filename)
 
     def save_picture_of_model(self, pos, filename):
         """

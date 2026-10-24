@@ -35,31 +35,34 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output 
 from simple_pid import PID
 import cmcrameri.cm as cm
+import logging
 import splineconverter
 from caneEditor import CaneEditor
 
 from SALib.sample.morris import sample as morris_sample
 from SALib.analyze.morris import analyze as morris_analyze
 
-def flip_segs_from_curve(segs, print_output=False):
+logger = logging.getLogger(__name__)
+
+def flip_segs_from_curve(segs):
     # Switch coordinate frames from spline (camera) to MuJoCo and center at origin
     trans_segs = np.zeros_like(segs)
     trans_segs[:,0] = segs[:,2].copy()-segs[-1,2]  # +x in mujoco is +z in camera ("forwards")
     trans_segs[:,1] = -segs[:,0].copy()+segs[-1,0]  # +y in mujoco is -x in camera ("left")
     trans_segs[:,2] = -segs[:,1].copy()+segs[-1,1]  # +z in mujoco is -y in camera ("up") (y was down in camera)
     segs_flipped = trans_segs[::-1]
-    if print_output:
-        print(segs_flipped)
+    logger.debug("Flipped segments:")
+    logger.debug(segs_flipped)
     return segs_flipped
 
-def get_midpoints(segs, print_output=False):
+def get_midpoints(segs):
     midpoint_zs = []
     for i in range(len(segs)-1):
         midpoint = (segs[i] + segs[i+1]) / 2
         midpoint_zs.append(midpoint[2])
     midpoint_zs = np.array(midpoint_zs)
-    if print_output:
-        print(midpoint_zs)
+    logger.debug("Midpoint Zs:")
+    logger.debug(midpoint_zs)
     return midpoint_zs
 
 def run_one_simulation(BUSH_NUM, BRANCH_NUM, TRIAL_NUM, test_mod, diam_func_factor, disc_type, lin_fit, probe_angle, error_model, num_segs=8):
@@ -128,7 +131,7 @@ class TrialSim():
 
         self.PROBE_HEIGHT = self.Branch.field_measurements.query('Location == ' + str(TRIAL_NUM))['Height'].values[0]/1000
         print(f"Setting probe height to: {self.PROBE_HEIGHT}")
-        self.Branch.editor.define_probe_site(self.PROBE_HEIGHT, self.Branch.zero_pos, self.Branch.branch_id, verbose=False)        
+        self.Branch.editor.define_probe_site(self.PROBE_HEIGHT, self.Branch.zero_pos, self.Branch.branch_id)        
         
         # import forces from csv
         filename = os.path.join(DATA_DIR, 'imu_cropped_push_data/bush_' + str(BUSH_DICT[self.Branch.BUSH_NUM]) + '_branch_' + str(self.Branch.BRANCH_NUM) + '_trial_' + str(self.TRIAL_NUM) + '.csv')
@@ -388,6 +391,8 @@ class BranchSim():
         if self.editor == None:
             self.make_own_editor(flex_mod)
 
+        logger.info(f"Initializing BranchSim for bush {self.BUSH_NUM}, branch {self.BRANCH_NUM}")
+
         DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../data/')
         diamdata = pd.read_csv(os.path.join(DATA_DIR, 'diameters/offset_branch_diameter_data.csv'))
         self.diameter_data_df = pd.DataFrame(diamdata)
@@ -397,13 +402,13 @@ class BranchSim():
             segs_mm, RMSE = self.deal_with_branch_9_2(num_segs, disc_type=disc_type)
         else: 
             segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(DATA_DIR, 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'), 
-                                                    make_plot=False, strictly_increasing=True, num_segs=num_segs, verbose=True, disc_type=disc_type)
+                                                    make_plot=False, strictly_increasing=True, num_segs=num_segs, disc_type=disc_type)
         
         segs = np.array(segs_mm)/1000
         # Correctly orient the segments for MuJoCo (they're upside down from the camera)
-        self.segs_flipped = flip_segs_from_curve(segs, print_output=False)
+        self.segs_flipped = flip_segs_from_curve(segs)
         # get the z-value of the midpoints of each segment
-        midpoint_zs = get_midpoints(self.segs_flipped, print_output=False)
+        midpoint_zs = get_midpoints(self.segs_flipped)
 
         # Get lengths of segments and angles between them (for setting up the MJCF model) 
         self.seg_lengths = splineconverter.get_segment_lengths(self.segs_flipped)
@@ -411,23 +416,24 @@ class BranchSim():
 
         # Get the radii at the segment midpoints 
         if lin_fit == 'height':
+            logger.info("Using height-based linear fit for diameters.")
             slope, measured_centroid = self.create_linearfit_from_diam_data()
             self.radii = self.get_rad_at_height(midpoint_zs, slope, measured_centroid, diam_func_factor=diam_func_factor)
         elif lin_fit == 'length':
-            print("Using length-based linear fit for diameters.")
+            logger.info("Using length-based linear fit for diameters.")
             linfit, _ = self.create_length_linearfit_from_diam_data()
-            print("Length-based linear fit: slope = {:.6f}, intercept = {:.6f}".format(linfit[0], linfit[1]))
+            logger.debug("Length-based linear fit: slope = {:.6f}, intercept = {:.6f}".format(linfit[0], linfit[1]))
             self.radii = self.get_rads_from_lens(linfit[0], linfit[1], diam_func_factor=diam_func_factor)
         elif lin_fit == 'length_wcentroid':
-            print("Using length-based linear fit with centroid for diameters.")
+            logger.info("Using length-based linear fit with centroid for diameters.")
             linfit, centroid = self.create_length_linearfit_from_diam_data()
-            print("Length-based linear fit with centroid: slope = {:.6f}, centroid = {}".format(linfit[0], centroid))
+            logger.debug("Length-based linear fit with centroid: slope = {:.6f}, centroid = {}".format(linfit[0], centroid))
             self.radii = self.get_rads_from_lens_wcentroid(linfit[0], centroid, diam_func_factor=diam_func_factor)
         else:
             raise ValueError("Unknown linear fit type: " + lin_fit)
-        print("Radii at segment midpoints:")
+        logger.debug("Radii at segment midpoints:")
         for i, radius in enumerate(self.radii):
-            print(f"  seg {i + 1}: {float(radius) * 1000:.3f} mm")
+            logger.debug("  seg {}: {:.3f} mm".format(i + 1, float(radius) * 1000))
 
         self.add_branch_to_mjdf(xy=xy, flex_modulus=flex_mod)
 
@@ -467,7 +473,7 @@ class BranchSim():
                     total_length += length_curr*(h-z_last)/(z_end-z_last)
                     # print(f"Interpolating segment {i} to height {height/1000}: adding {(h-z_last)/(z_end-z_last)*length_curr:.3f} to total length.")
                     last_flag = True
-            print(f"Height: {height/1000}, Total length to reach this height: {total_length:3f}")
+            logger.debug(f"Height: {height/1000}, branch length to reach this height: {total_length:3f}")
             lengths_to_heights.append(total_length)
         diam_linearfit = np.polyfit(lengths_to_heights, self.field_measurements['Diameter'], 1)
         centroid = (np.mean(lengths_to_heights), np.mean(self.field_measurements['Diameter']))
@@ -499,7 +505,7 @@ class BranchSim():
         while not angles_validated:
             segs_mm, RMSE = splineconverter.segment_curve_from_cloudcompare(os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../data/'), 'ccCurves/B' + str(self.BUSH_NUM) + '_branch' + str(self.BRANCH_NUM) + '_smoothpolyline_minbb.txt'),
                                                 make_plot=True, strictly_increasing=False, num_segs=num_segs, disc_type=disc_type, deterministic=False)
-            segs_flipped = flip_segs_from_curve(segs_mm, print_output=False)
+            segs_flipped = flip_segs_from_curve(segs_mm)
             seg_angles = splineconverter.get_angles_between_segments(segs_flipped) 
             if abs(max(seg_angles.min(), seg_angles.max(), key=abs))<np.pi/2:
                 print(f"Valid segmentation found!!")
@@ -530,7 +536,6 @@ class BranchSim():
                                                branch_id=branch_id,
                                                angles_x=self.seg_angles[:,0],
                                                angles_y=self.seg_angles[:,1],
-                                               verbose=False,
                                                xy=xy)
         self.zero_pos = self.editor.get_zero_springref_pos()
         self.editor.total_length[branch_id] = self.segs_flipped[-1][2]

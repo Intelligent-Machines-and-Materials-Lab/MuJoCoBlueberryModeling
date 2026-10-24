@@ -25,6 +25,8 @@ sudo apt install -y build-essential cmake git python3 python3-dev \
 
 CMake check: `cmake --version` (this machine has 4.4.4; MuJoCo's top-level `CMakeLists.txt` required 3.16).
 
+OpenUSD requres at least cmake 3.26; to upgrade, follow instructions at https://linuxcapable.com/how-to-install-cmake-on-ubuntu-linux/
+
 Notes from `apt update` on this machine:
 
 - `NO_PUBKEY FB0B24895113F120` for the librealsense repo: apt skipped that repo and used old indexes. Harmless for this build.
