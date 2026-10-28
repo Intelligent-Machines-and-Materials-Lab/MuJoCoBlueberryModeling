@@ -9,6 +9,7 @@ build_branch
 """
 
 
+from random import random
 from xml.parsers.expat import model
 
 import mujoco
@@ -21,6 +22,7 @@ from IPython.display import HTML, display
 from scipy.spatial.transform import Rotation as R 
 import logging
 from utilities.blueberryclustergenerator import BlueberryClusterGenerator
+from utilities.leafclustergenerator import LeafClusterGenerator
 
 BROWN = np.array([0.4, 0.24, 0.0, 1])
 POLYLINE_GOLD = np.array([220/255, 159/255, 85/255, 1])
@@ -58,6 +60,7 @@ class CaneEditor():
         self.spec.default.site.rgba = np.array([0, 0, 0, 0])
 
         self.BerryGen = BlueberryClusterGenerator()
+        self.LeafGen = LeafClusterGenerator(self.spec)
 
         self.num_canes = 0
         self.cane_ids = []
@@ -381,6 +384,54 @@ class CaneEditor():
                               pos=[-radial_offset*np.cos(azimuth_rad), -radial_offset*np.sin(azimuth_rad), hypotenuse], 
                               quat=frame_quat)
         self.spec.attach(berry, frame=cluster_frame, prefix=f"cluster_{self.BerryGen.berry_counter}")
+        self.model = self.spec.compile()
+
+    def add_leaf_to_branch_at_height(self, height, branch_id, tilt=45.0, azimuth=None, variant=None):
+        """
+        Adds a fixed (welded) leaf at the given height along the branch.
+        height: height along the branch to add the leaf
+        branch_id: branch_id of the branch to add the leaf to
+        tilt: angle between the branch axis and the leaf (degrees); 0 = pointing straight up the branch
+        azimuth: angle around the branch (degrees); random if None
+        variant: index of the leaf shape in the OBJ; random if None
+        """
+        parent_body, data = self.id_parent_body_for_loc(height, branch_id)
+        hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
+        branch_radius = parent_body.geoms[0].size[0]
+        if azimuth is None:
+            azimuth = np.random.uniform(0.0, 360.0)
+        azimuth_rad = np.deg2rad(azimuth)
+        # rotate so leaf x points radially outward (matching the berry placement), then lean the blade outward
+        leaf_rotation = R.from_euler("z", azimuth + 180, degrees=True) * R.from_euler("y", tilt, degrees=True)
+        xyzw = leaf_rotation.as_quat()
+        self.LeafGen.gen_single_leaf(parent_body,
+                                     pos=[-branch_radius*np.cos(azimuth_rad), -branch_radius*np.sin(azimuth_rad), hypotenuse],
+                                     quat=[xyzw[3], xyzw[0], xyzw[1], xyzw[2]],
+                                     variant=variant)
+        self.model = self.spec.compile()
+
+    def add_leaf_cluster_to_branch_at_height(self, height, branch_id, num_leaves, tilt=40.0, azimuth=None):
+        """
+        Adds a fixed (welded) stem with num_leaves leaves at the given height along the branch.
+        height: height along the branch to add the cluster
+        branch_id: branch_id of the branch to add the cluster to
+        num_leaves: number of leaves on the cluster stem
+        tilt: angle between the branch axis and the cluster stem (degrees); 0 = pointing straight up the branch
+        azimuth: angle around the branch (degrees); random if None
+        """
+        parent_body, data = self.id_parent_body_for_loc(height, branch_id)
+        hypotenuse = self.find_remaining_hypotenuse(height, branch_id, parent_body, data)
+        branch_radius = parent_body.geoms[0].size[0]
+        if azimuth is None:
+            azimuth = np.random.uniform(0.0, 360.0)
+        azimuth_rad = np.deg2rad(azimuth)
+        # same placement as a single leaf: stem x points radially outward, then the stem leans outward
+        stem_rotation = R.from_euler("z", azimuth + 180, degrees=True) * R.from_euler("y", tilt, degrees=True)
+        xyzw = stem_rotation.as_quat()
+        self.LeafGen.gen_leaf_cluster(parent_body,
+                                      pos=[-branch_radius*np.cos(azimuth_rad), -branch_radius*np.sin(azimuth_rad), hypotenuse],
+                                      quat=[xyzw[3], xyzw[0], xyzw[1], xyzw[2]],
+                                      num_leaves=num_leaves)
         self.model = self.spec.compile()
         
     def add_point_mass_at_height_on_branch(self, height, branch_id, mass, radius):

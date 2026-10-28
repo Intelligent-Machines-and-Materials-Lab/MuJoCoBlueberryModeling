@@ -130,18 +130,23 @@ if __name__ == "__main__":
     logging.getLogger("caneEditor").setLevel(logging.INFO)
     logging.getLogger("caneSimulator").setLevel(logging.INFO)
     logging.getLogger("splineconverter").setLevel(logging.WARNING)
+    logging.getLogger("leafclustergenerator").setLevel(logging.DEBUG)
 
     # {avg_mass: {"times": (N,) array, "tips": {cane_id: (N, 3) array}}}
     results = {}
 
-    for avg_mass in [.001, .00325, .0065]:
+    # for avg_mass in [.001, .00325, .0065]:
+    for avg_mass in [.00325]:
         editor = CaneEditor(BRANCH_XML)
+        # editor.LeafGen.debug_variant_colors = True  # enable debug coloring for leaves
         # Bush 23's origin wasn't in the right place, so either fix that or use other ones
         B1, B2 = build_bush(editor, BRANCH_ORIGINS_DF, 1)
         # make_berry_config(editor, 1, f'bush_{1}_config.json')
         logger.info(f"Building bush with average berry mass {avg_mass*1000:.2f} g")
         editor.BerryGen.change_berry_mass(avg_mass)  # example of changing the default berry mass before loading the config
         load_berry_config('bush_1_config.json')
+        editor.add_leaf_cluster_to_branch_at_height(height=0.45, branch_id="B1_B1", tilt=45.0, num_leaves=10)
+        editor.add_leaf_cluster_to_branch_at_height(height=0.6, branch_id="B1_B1", tilt=55.0, num_leaves=6)   
 
         # editor.print_xml_to_console()
 
