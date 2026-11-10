@@ -42,6 +42,7 @@ import caneEditor
 import splineconverter
 from caneEditor import CaneEditor
 from caneSimulator import BranchSim, flip_segs_from_curve, get_midpoints
+import worldeditor
 
 def build_bush(editor, branch_origins_df, bush_num):
     B = BranchSim(bush_num, 1, editor=editor, xy=branch_origins_df[bush_num][1])
@@ -145,9 +146,13 @@ if __name__ == "__main__":
         logger.info(f"Building bush with average berry mass {avg_mass*1000:.2f} g")
         editor.BerryGen.change_berry_mass(avg_mass)  # example of changing the default berry mass before loading the config
         load_berry_config('bush_1_config.json')
-        editor.add_leaf_cluster_to_branch_at_height(height=0.45, branch_id="B1_B1", tilt=45.0, num_leaves=10)
-        editor.add_leaf_cluster_to_branch_at_height(height=0.6, branch_id="B1_B1", tilt=55.0, num_leaves=6)   
+        # editor.add_leaf_cluster_to_branch_at_height(height=0.45, branch_id="B1_B1", tilt=45.0, num_leaves=10)
+        # editor.add_leaf_cluster_to_branch_at_height(height=0.6, branch_id="B1_B1", tilt=55.0, num_leaves=6)   
+        # editor.add_leaf_cluster_to_branch_at_height(height=0.75, branch_id="B1_B1", tilt=40.0, num_leaves=8)
 
+        # spec is modified in place; recompile so editor.model includes the wire
+        worldeditor.add_wire_at_height_and_depth(editor.spec, height=0.5, depth=-0.15)
+        editor.model = editor.spec.compile()
         # editor.print_xml_to_console()
 
         model = editor.model
