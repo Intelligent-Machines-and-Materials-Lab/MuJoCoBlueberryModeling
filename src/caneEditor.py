@@ -42,7 +42,7 @@ class CaneEditor():
         # self.spec.default.geom.solref = [0.1, 1]
         # self.spec.default.geom.solimp = [0.95, 1, 0.0025, 1, 0.5]
         self.spec.default.geom.solref = [0.2, 1]
-        self.spec.default.geom.solimp = [0.5, .8, 0.01, 1, 0.5]
+        self.spec.default.geom.solimp = [0.5, .95, 0.01, .5, 1]
         self.spec.default.geom.friction = [0, 0, 0]
         # self.model = self.spec.compile()
 

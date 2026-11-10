@@ -61,7 +61,11 @@ class BlueberryClusterGenerator:
                                pos=[0, 0, rand_size],
                                size=[rand_size, 0, 0],
                                rgba=rand_blue,
-                               mass=rand_mass)
+                               mass=rand_mass,
+                               solref=[.003, 1.2],              # timeconst 3ms, slightly overdamped
+                               solimp=[0.6,.95,.002, 0.5, 2],   # soft at first touch, firm by 2mm
+                               solmix=10                        # berry params win when mixed with other geoms
+                               )
 
         self.berry_counter += 1
         return spec

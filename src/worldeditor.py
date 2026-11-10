@@ -42,10 +42,12 @@ def add_wire_at_height_and_depth(spec, height, depth, friction=0.5):
     wire_body.add_geom(
         name=f"wire_geom_{height}_{depth}",
         type=mujoco.mjtGeom.mjGEOM_CYLINDER,
-        size=[0.01, 0.5, 0],  # radius, half-length
+        size=[0.0025, 0.5, 0],  # radius, half-length
         pos=[0, 0, 0],
         quat=[np.sqrt(0.5), np.sqrt(0.5), 0, 0],  # rotate 90 deg about x: cylinder z-axis -> world y-axis
         # contact friction = max of the two geoms, so this overrides the canes' zero friction
         friction=[friction, 0.005, 0.0001],
+        solref=[.005, 1],
+        solimp=[0.9,.95,.001, 0.5, 2]
     )
     return spec
